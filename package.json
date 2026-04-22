@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch server/index.ts",
+    "dev": "tsx watch --ignore './vite.config.ts.timestamp-*' server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "lint": "eslint . --ext .ts,.tsx",

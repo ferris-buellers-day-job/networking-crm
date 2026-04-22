@@ -8,12 +8,4 @@ export default defineConfig({
     outDir: "../dist/client",
     emptyOutDir: true,
   },
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:3000",
-        changeOrigin: true,
-      },
-    },
-  },
 });
