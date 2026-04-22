@@ -69,6 +69,7 @@ Backup: `~/NetworkingCRM-backup/` (git repo, outside iCloud)
 - Commit messages follow conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).
 - No CSS frameworks until the polish sprint. Plain CSS or CSS modules.
 - Log format: structured JSON per line (`{"ts":"...","level":"info","op":"...","msg":"..."}`) for easy grep and tailability.
+- Git workflow: push to origin after every commit. Do not batch pushes.
 
 ## Documentation maintenance protocol
 **At the end of every working session, before David closes the session, run the following checklist out loud in chat so he can confirm:**
