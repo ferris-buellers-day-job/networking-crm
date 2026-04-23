@@ -40,3 +40,4 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+.claude/settings.local.json
