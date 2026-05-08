@@ -22,6 +22,10 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Tag/category filtering
 - [ ] Timeline view of interactions
 
+## Sprint 03 candidates
+
+- [ ] "Repair quarantined file" UI flow — surface quarantined files in System Status, allow viewing, comparing to git backup, manual edit, or deletion.
+
 ## Data & Reliability
 
 - [ ] Schema migration tooling (for future schemaVersion bumps)
