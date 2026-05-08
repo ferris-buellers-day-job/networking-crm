@@ -59,6 +59,22 @@ Claude Code creates `.claude/settings.local.json` for machine-specific settings 
 
 The global `.claude/settings.json` (if it existed) would also be local state, but currently only `settings.local.json` is generated.
 
+## Process gap: ESLint config missing
+
+**Discovered:** Sprint 02 session (2026-05-07)
+
+**Issue:** The Sprint 01 acceptance criterion "`npm run lint` passes" was checked off, but no `.eslintrc.*` config file was ever created or committed. The lint script (`eslint . --ext .ts,.tsx`) fails without a config:
+
+```
+ESLint couldn't find a configuration file.
+```
+
+**Impact:** The lint check was either not actually run, or was run in an environment with a global/home-directory ESLint config that masked the missing project config.
+
+**Resolution:** Created `.eslintrc.cjs` in Sprint 02 with basic TypeScript rules. Future sprints should verify acceptance criteria by actually running the commands rather than assuming prior work.
+
+**Lesson:** Acceptance criteria should include "command output shows success" not just "command exists in package.json."
+
 ## Commit sequence
 
 1. `ab668c9` — docs: initial project documentation and sprint specs
