@@ -1,6 +1,22 @@
 import Database from 'better-sqlite3';
 import type { Database as DatabaseType } from 'better-sqlite3';
+import { unlinkSync, existsSync } from 'node:fs';
 import type { BaseRecord } from './schemas/base-record.js';
+
+/**
+ * Error thrown when cached data cannot be parsed.
+ * Indicates the cache is corrupted and should be rebuilt.
+ */
+export class CacheDataCorruptedError extends Error {
+  constructor(
+    public readonly table: string,
+    public readonly id: string,
+    public readonly cause: Error
+  ) {
+    super(`Corrupted cache data in table "${table}" for id "${id}": ${cause.message}`);
+    this.name = 'CacheDataCorruptedError';
+  }
+}
 
 /**
  * SQLite cache layer for fast querying of JSON file data.
@@ -16,11 +32,44 @@ import type { BaseRecord } from './schemas/base-record.js';
 export class CacheDb {
   private db: DatabaseType;
   private knownTables: Set<string> = new Set();
+  private dbPath: string;
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
-    // Enable WAL mode for better concurrent read performance
-    this.db.pragma('journal_mode = WAL');
+    this.dbPath = dbPath;
+    this.db = this.openDatabase();
+  }
+
+  /**
+   * Opens the database, handling corruption by deleting and recreating.
+   */
+  private openDatabase(): DatabaseType {
+    try {
+      const db = new Database(this.dbPath);
+      // Enable WAL mode for better concurrent read performance
+      db.pragma('journal_mode = WAL');
+      // Validate the database is readable
+      db.pragma('integrity_check');
+      return db;
+    } catch (err) {
+      // Database is corrupted - delete and recreate
+      if (existsSync(this.dbPath)) {
+        unlinkSync(this.dbPath);
+      }
+      // Also clean up WAL and SHM files if they exist
+      const walPath = `${this.dbPath}-wal`;
+      const shmPath = `${this.dbPath}-shm`;
+      if (existsSync(walPath)) {
+        unlinkSync(walPath);
+      }
+      if (existsSync(shmPath)) {
+        unlinkSync(shmPath);
+      }
+
+      // Create fresh database
+      const db = new Database(this.dbPath);
+      db.pragma('journal_mode = WAL');
+      return db;
+    }
   }
 
   /**
@@ -74,6 +123,7 @@ export class CacheDb {
   /**
    * Get a single record by ID.
    * Returns the parsed record or null if not found.
+   * @throws {CacheDataCorruptedError} if the stored JSON is invalid
    */
   get(table: string, id: string): unknown | null {
     this.ensureTable(table);
@@ -87,22 +137,33 @@ export class CacheDb {
       return null;
     }
 
-    return JSON.parse(row.data);
+    try {
+      return JSON.parse(row.data);
+    } catch (err) {
+      throw new CacheDataCorruptedError(table, id, err as Error);
+    }
   }
 
   /**
    * Get all records from a table.
    * Returns parsed records.
+   * @throws {CacheDataCorruptedError} if any stored JSON is invalid
    */
   getAll(table: string): unknown[] {
     this.ensureTable(table);
 
     const stmt = this.db.prepare(`
-      SELECT data FROM "${table}"
+      SELECT id, data FROM "${table}"
     `);
 
-    const rows = stmt.all() as { data: string }[];
-    return rows.map((row) => JSON.parse(row.data));
+    const rows = stmt.all() as { id: string; data: string }[];
+    return rows.map((row) => {
+      try {
+        return JSON.parse(row.data);
+      } catch (err) {
+        throw new CacheDataCorruptedError(table, row.id, err as Error);
+      }
+    });
   }
 
   /**
@@ -134,12 +195,18 @@ export class CacheDb {
   }
 
   /**
-   * Clear all data from all known tables.
+   * Clear all data from all tables in the database.
    * Used for full cache rebuild.
    */
   clear(): void {
-    for (const table of this.knownTables) {
-      this.db.exec(`DELETE FROM "${table}"`);
+    // Query sqlite_master for all user tables (not sqlite_ internal tables)
+    const tables = this.db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+      .all() as { name: string }[];
+
+    for (const { name } of tables) {
+      this.db.exec(`DELETE FROM "${name}"`);
+      this.knownTables.add(name);
     }
   }
 

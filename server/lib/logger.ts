@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from 'node:fs';
+import { mkdirSync, readdirSync, unlinkSync, existsSync, openSync, writeSync, fsyncSync, closeSync } from 'node:fs';
 import path from 'node:path';
 
 export interface Logger {
@@ -83,8 +83,6 @@ export function createLogger(logDir: string, options: LoggerOptions = {}): Logge
           const filePath = path.join(dir, file);
           try {
             unlinkSync(filePath);
-            // Log deletion at debug level (write directly to avoid recursion issues)
-            writeLog('debug', 'logger.cleanup', `Deleted old log file: ${file}`, {});
           } catch {
             // Ignore deletion errors
           }
@@ -117,17 +115,29 @@ export function createLogger(logDir: string, options: LoggerOptions = {}): Logge
     };
 
     const line = JSON.stringify(entry) + '\n';
+    const buffer = Buffer.from(line, 'utf-8');
 
     try {
-      appendFileSync(currentLogPath, line, 'utf-8');
+      writeAndSync(currentLogPath, buffer);
     } catch (err) {
       // If write fails, try to create directory and retry once
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         mkdirSync(logDir, { recursive: true });
-        appendFileSync(currentLogPath, line, 'utf-8');
+        writeAndSync(currentLogPath, buffer);
       } else {
         throw err;
       }
+    }
+  }
+
+  function writeAndSync(filePath: string, buffer: Buffer): void {
+    // Open file in append mode, create if doesn't exist
+    const fd = openSync(filePath, 'a');
+    try {
+      writeSync(fd, buffer);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
     }
   }
 

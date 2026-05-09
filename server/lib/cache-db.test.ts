@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { CacheDb } from './cache-db.js';
+import Database from 'better-sqlite3';
+import { CacheDb, CacheDataCorruptedError } from './cache-db.js';
 import type { BaseRecord } from './schemas/base-record.js';
 
 function createTestRecord(
@@ -247,6 +248,102 @@ describe('CacheDb', () => {
       expect(() => db.upsert('action_items', record)).not.toThrow();
       expect(() => db.upsert('Contact123', record)).not.toThrow();
       expect(() => db.upsert('_private', record)).not.toThrow();
+    });
+  });
+
+  describe('corrupted data handling', () => {
+    it('throws CacheDataCorruptedError when get() encounters invalid JSON', () => {
+      const record = createTestRecord();
+      db.upsert('contacts', record);
+
+      // Directly corrupt the data in the database
+      const rawDb = new Database(dbPath);
+      rawDb.exec(`UPDATE contacts SET data = 'not valid json' WHERE id = '${record.id}'`);
+      rawDb.close();
+
+      expect(() => db.get('contacts', record.id)).toThrow(CacheDataCorruptedError);
+    });
+
+    it('throws CacheDataCorruptedError when getAll() encounters invalid JSON', () => {
+      const record = createTestRecord();
+      db.upsert('contacts', record);
+
+      // Directly corrupt the data in the database
+      const rawDb = new Database(dbPath);
+      rawDb.exec(`UPDATE contacts SET data = '{broken' WHERE id = '${record.id}'`);
+      rawDb.close();
+
+      expect(() => db.getAll('contacts')).toThrow(CacheDataCorruptedError);
+    });
+
+    it('CacheDataCorruptedError includes table and id', () => {
+      const record = createTestRecord();
+      db.upsert('contacts', record);
+
+      const rawDb = new Database(dbPath);
+      rawDb.exec(`UPDATE contacts SET data = 'bad' WHERE id = '${record.id}'`);
+      rawDb.close();
+
+      try {
+        db.get('contacts', record.id);
+        expect.fail('Should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(CacheDataCorruptedError);
+        const cacheErr = err as CacheDataCorruptedError;
+        expect(cacheErr.table).toBe('contacts');
+        expect(cacheErr.id).toBe(record.id);
+      }
+    });
+  });
+
+  describe('clear with unknown tables', () => {
+    it('clears tables not accessed through this CacheDb instance', () => {
+      // Create a table using raw SQL (simulating a previous run)
+      const rawDb = new Database(dbPath);
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS legacy_table (
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      rawDb.exec(`INSERT INTO legacy_table VALUES ('old-id', '{"test": true}', '2026-01-01')`);
+      rawDb.close();
+
+      // Our db instance doesn't know about legacy_table
+      const record = createTestRecord();
+      db.upsert('contacts', record);
+
+      // Clear should wipe both tables
+      db.clear();
+
+      // Verify both tables are empty
+      expect(db.getAll('contacts')).toEqual([]);
+
+      const checkDb = new Database(dbPath);
+      const rows = checkDb.prepare('SELECT * FROM legacy_table').all();
+      checkDb.close();
+      expect(rows).toEqual([]);
+    });
+  });
+
+  describe('corrupted database recovery', () => {
+    it('recovers from corrupted database file', async () => {
+      db.close();
+
+      // Write garbage to the database file
+      await writeFile(dbPath, 'this is not a valid sqlite database');
+
+      // Creating a new CacheDb should recover
+      const newDb = new CacheDb(dbPath);
+      newDb.init();
+
+      // Should work normally
+      const record = createTestRecord();
+      expect(() => newDb.upsert('contacts', record)).not.toThrow();
+      expect(newDb.get('contacts', record.id)).toEqual(record);
+
+      newDb.close();
     });
   });
 });
