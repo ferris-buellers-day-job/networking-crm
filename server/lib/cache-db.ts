@@ -47,8 +47,12 @@ export class CacheDb {
       const db = new Database(this.dbPath);
       // Enable WAL mode for better concurrent read performance
       db.pragma('journal_mode = WAL');
-      // Validate the database is readable
-      db.pragma('integrity_check');
+      // Validate database integrity. Returns 'ok' if healthy, or error descriptions.
+      // We check explicitly because pragma() doesn't throw on integrity failures.
+      const result = db.pragma('integrity_check') as { integrity_check: string }[];
+      if (result[0]?.integrity_check !== 'ok') {
+        throw new Error('Database integrity check failed');
+      }
       return db;
     } catch (err) {
       // Database is corrupted - delete and recreate
