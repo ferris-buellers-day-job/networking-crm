@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, readdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createLogger } from './logger.js';
@@ -109,6 +109,40 @@ describe('Logger', () => {
       const lines = content.trim().split('\n').map((l) => JSON.parse(l));
 
       expect(lines.map((l) => l.level)).toEqual(['debug', 'info', 'warn', 'error']);
+    });
+
+    it('write path produces correct file contents via separate handle', async () => {
+      const logger = createLogger(logDir, {
+        getCurrentDate: () => '2026-05-07',
+        getCurrentTimestamp: () => '2026-05-07T12:00:00.000Z',
+      });
+
+      logger.info('test.op', 'First entry', { key: 'value1' });
+      logger.warn('test.op', 'Second entry', { key: 'value2' });
+
+      // Read via separate file handle (not fs.readFile which may use same cache)
+      const logPath = path.join(logDir, 'app-2026-05-07.log');
+      const handle = await open(logPath, 'r');
+      try {
+        const content = await handle.readFile('utf-8');
+        const lines = content.trim().split('\n');
+
+        expect(lines).toHaveLength(2);
+
+        const first = JSON.parse(lines[0]);
+        expect(first.ts).toBe('2026-05-07T12:00:00.000Z');
+        expect(first.level).toBe('info');
+        expect(first.op).toBe('test.op');
+        expect(first.msg).toBe('First entry');
+        expect(first.key).toBe('value1');
+
+        const second = JSON.parse(lines[1]);
+        expect(second.level).toBe('warn');
+        expect(second.msg).toBe('Second entry');
+        expect(second.key).toBe('value2');
+      } finally {
+        await handle.close();
+      }
     });
   });
 
