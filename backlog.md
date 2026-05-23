@@ -31,6 +31,8 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Schema migration tooling (for future schemaVersion bumps)
 - [ ] Conflict detection for iCloud sync races
 - [ ] Backup verification (periodic integrity check of git backup)
+- [ ] FileStore.findFileById uses substring match on UUID — technically loose (e.g., a file named "abc-<uuid>-def.json" would match). Consider exact-match validation in future hardening.
+- [ ] Per-entity schema versions (Sprint 04+) — replace single EXPECTED_SCHEMA_VERSION constant with per-entity version map when Contact and Interaction entities ship.
 
 ## Polish
 

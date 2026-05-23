@@ -95,7 +95,7 @@ Backup: `~/NetworkingCRM-backup/` (git repo, outside iCloud)
 - `CHANGELOG.md` — shipped work, dated.
 
 ## Current sprint
-**Sprint 02 — Foundation Storage.** See `specs/sprint-02-foundation-storage/spec.md`.
+**Sprint 03 — Error Handling.** Spec does not exist yet; first task is to draft `specs/sprint-03-error-handling/spec.md`.
 
 ## Sprint sequence (for context; don't pre-read)
 1. Skeleton — project scaffolding, nothing persistent.
