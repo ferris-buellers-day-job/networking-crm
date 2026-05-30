@@ -22,9 +22,13 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Tag/category filtering
 - [ ] Timeline view of interactions
 
-## Sprint 03 candidates
+## Sprint 03.5 — Status & Toast UI
 
-- [ ] "Repair quarantined file" UI flow — surface quarantined files in System Status, allow viewing, comparing to git backup, manual edit, or deletion.
+- [ ] Toast notification system — non-fatal error toasts with "Copy debug info" button, auto-dismiss, stacking.
+- [ ] System Status view (`/status` route) — integrity report, quarantined files list, iCloud conflicts, backup status, file watcher status.
+- [ ] Header status indicator — green/yellow/red icon reflecting health, links to /status.
+- [ ] Quarantine repair flow — view quarantined file content, delete permanently, attempt re-import.
+- [ ] Log viewer UI — tail recent logs in-browser, filter by level, download log file.
 
 ## Data & Reliability
 
