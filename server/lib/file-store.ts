@@ -1,4 +1,4 @@
-import { readFile, readdir, rename, mkdir, access } from 'node:fs/promises';
+import { readFile, readdir, rename, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { ZodType, ZodError } from 'zod';
 import { atomicWriteJson } from './atomic-writer.js';

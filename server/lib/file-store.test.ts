@@ -354,7 +354,7 @@ describe('FileStore', () => {
       await store.save(record);
 
       // First get populates cache from save
-      const first = await store.get(record.id);
+      await store.get(record.id);
 
       // Modify the disk file directly (simulate external change without going through store)
       const filePath = path.join(dataDir, `${record.id}.json`);
