@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "./components/error-boundary.js";
 
 interface HealthResponse {
-  ok: boolean;
+  status: "ok" | "degraded" | "error";
   version: string;
   commit: string;
+  integrity: {
+    ok: boolean;
+    warnings: number;
+    lastChecked: string;
+  };
 }
 
-export function App() {
+function AppContent() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [debug, setDebug] = useState<string | null>(null);
 
@@ -19,7 +25,7 @@ export function App() {
         return res.json() as Promise<HealthResponse>;
       })
       .then((data) => {
-        if (data.ok) {
+        if (data.status === "ok" || data.status === "degraded") {
           setStatus("ready");
         } else {
           setStatus("error");
@@ -47,4 +53,12 @@ export function App() {
   }
 
   return <div>Ready</div>;
+}
+
+export function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
 }
