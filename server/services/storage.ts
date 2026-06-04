@@ -6,6 +6,8 @@ import { CacheDb } from '../lib/cache-db.js';
 import { FileWatcher, type FileWatcherEvent } from '../lib/file-watcher.js';
 import { BackupService } from '../lib/backup-service.js';
 import { runIntegrityCheck, type IntegrityReport } from '../lib/integrity-check.js';
+import { FileStore } from '../lib/file-store.js';
+import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 
 /**
  * Error thrown when storage initialization fails fatally.
@@ -36,6 +38,7 @@ export interface StorageContext {
   backupService: BackupService;
   integrityReport: IntegrityReport;
   integrityCheckedAt: string;
+  contactsStore: FileStore<Contact>;
 
   /** Start file watcher and backup scheduler */
   start(): void;
@@ -51,8 +54,7 @@ const UUID_PATTERN = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const EXPECTED_SCHEMA_VERSION = 1;
 
 // Entity directories to check for cache staleness
-// Empty for Sprint 02; will be ['contacts'] in Sprint 04, etc.
-const ENTITY_DIRECTORIES: string[] = [];
+const ENTITY_DIRECTORIES: string[] = ['contacts'];
 
 /**
  * Initialize the storage layer.
@@ -174,6 +176,14 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
   // 6. Create BackupService (not started yet)
   const backupService = new BackupService(config.dataPath, config.backupPath, { logger });
 
+  // 7. Create entity FileStores
+  const contactsStore = new FileStore<Contact>(
+    path.join(config.dataPath, 'contacts'),
+    ContactSchema,
+    { cacheDb, logger, recentWrites },
+    { expectedSchemaVersion: CONTACT_SCHEMA_VERSION }
+  );
+
   logger.info('storage.init', 'Storage layer initialized successfully');
 
   // Build context with start/stop methods
@@ -188,6 +198,7 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     backupService,
     integrityReport,
     integrityCheckedAt,
+    contactsStore,
 
     start(): void {
       if (isStarted) return;

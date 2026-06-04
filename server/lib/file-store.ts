@@ -296,14 +296,13 @@ export class FileStore<T extends BaseRecord> {
       }
 
       if (schemaVersion < this.expectedSchemaVersion) {
-        // TODO(sprint-04): implement schema migration for older versions
-        // For now, proceed with validation (may fail if schema has breaking changes)
-        // TODO: log a warn here once migration system exists, so we have visibility into files needing migration
-        this.logger.warn('fileStore.readAndValidate', `Schema version lower than expected`, {
+        const reason = `Schema migration not yet implemented (found v${schemaVersion}, expected v${this.expectedSchemaVersion})`;
+        await this.quarantine(filePath, reason);
+        throw new FileStoreQuarantineError(
           filePath,
-          found: schemaVersion,
-          expected: this.expectedSchemaVersion,
-        });
+          await this.getQuarantinePath(filePath),
+          reason
+        );
       }
     }
 

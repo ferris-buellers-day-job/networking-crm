@@ -233,6 +233,32 @@ describe('FileStore', () => {
       expect(error.reason).toContain('found 999');
       expect(error.reason).toContain('expected 1');
     });
+
+    it('quarantines and throws when schema version is lower than expected', async () => {
+      // Create a store that expects schema version 2
+      const storeV2 = new FileStore(
+        dataDir,
+        TestRecordSchema,
+        { cacheDb, logger, recentWrites },
+        { expectedSchemaVersion: 2 }
+      );
+
+      // Write a file with schema version 1
+      const record = createTestRecord({ schemaVersion: 1 });
+      const filePath = path.join(dataDir, `${record.id}.json`);
+      await writeFile(filePath, JSON.stringify(record));
+
+      const error = await storeV2.get(record.id).catch((e) => e);
+
+      expect(error).toBeInstanceOf(FileStoreQuarantineError);
+      expect(error.reason).toBe('Schema migration not yet implemented (found v1, expected v2)');
+
+      // Verify file was quarantined
+      const quarantineDir = path.join(tempDir, '.quarantine');
+      const quarantinedFiles = await readdir(quarantineDir);
+      expect(quarantinedFiles.length).toBe(1);
+      expect(quarantinedFiles[0]).toContain(record.id);
+    });
   });
 
   describe('getAll', () => {
