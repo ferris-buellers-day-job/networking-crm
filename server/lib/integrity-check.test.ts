@@ -265,6 +265,12 @@ describe('IntegrityCheck', () => {
       // Create file
       await writeFile(filePath, JSON.stringify({ id, name: 'Test' }));
 
+      // Sleep between file write and cache timestamp to avoid clock-asymmetry false positives.
+      // The filesystem's mtime rounding and JavaScript's Date sampling are independent clocks;
+      // immediate sequential calls can produce mtime > cacheTime by a millisecond. The 10ms gap
+      // ensures the cache timestamp is definitively after the file mtime.
+      await new Promise((r) => setTimeout(r, 10));
+
       // Add cache entry with current timestamp
       const now = new Date().toISOString();
       cache.upsert('contacts', {
@@ -274,9 +280,6 @@ describe('IntegrityCheck', () => {
         deletedAt: null,
         schemaVersion: 1,
       });
-
-      // Wait a tiny bit to ensure file mtime is before cache timestamp
-      await new Promise((r) => setTimeout(r, 10));
 
       const report = await runIntegrityCheck(dataPath, cache, {
         expectedSchemaVersion: 1,

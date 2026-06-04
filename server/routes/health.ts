@@ -20,11 +20,31 @@ function getGitCommit(): string {
 }
 
 /**
+ * Determine overall system status from integrity report.
+ * - 'ok': integrity check passed with zero warnings
+ * - 'degraded': integrity check passed but has warnings
+ * - 'error': integrity check failed (shouldn't happen if app is running)
+ */
+function computeStatus(
+  integrityOk: boolean,
+  schemaVersionOk: boolean,
+  warnings: number
+): 'ok' | 'degraded' | 'error' {
+  if (!schemaVersionOk) {
+    return 'error';
+  }
+  if (warnings > 0 || !integrityOk) {
+    return 'degraded';
+  }
+  return 'ok';
+}
+
+/**
  * Create the health router with integrity information.
  *
  * Response format:
  * {
- *   ok: true,                    // Always true if Express is running
+ *   status: "ok" | "degraded" | "error",
  *   version: "0.1.0",
  *   commit: "abc1234",
  *   integrity: {
@@ -50,8 +70,11 @@ export function createHealthRouter(deps: HealthRouterDeps): Router {
     // Integrity is "ok" if schema version is fine and no warnings
     const integrityOk = integrityReport.schemaVersionOk && warnings === 0;
 
+    // Compute overall status
+    const status = computeStatus(integrityOk, integrityReport.schemaVersionOk, warnings);
+
     res.json({
-      ok: true, // Server is running, always true here
+      status,
       version: pkg.version,
       commit: getGitCommit(),
       integrity: {

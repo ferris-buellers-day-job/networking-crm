@@ -234,6 +234,10 @@ async function checkCacheStaleness(
             staleCount++;
           } else {
             // Compare file mtime to cache timestamp
+            // Note: in rare cases, same-second writes can produce false staleness due to clock asymmetry
+            // between filesystem mtime and JavaScript Date. The staleness is harmless (cache rebuild
+            // is a no-op when entries are actually up to date), but worth knowing if false 'cacheRebuilt'
+            // warnings appear frequently in production.
             const cacheTime = new Date(cacheLastModified);
             if (fileMtime > cacheTime) {
               staleCount++;

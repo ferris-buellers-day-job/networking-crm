@@ -3,6 +3,8 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { homedir } from 'os';
 import { createHealthRouter } from './routes/health.js';
+import { createClientErrorRouter } from './routes/client-error.js';
+import { createErrorHandler } from './middleware/error-handler.js';
 import { initStorage, FatalStorageError, type StorageContext } from './services/storage.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -119,12 +121,20 @@ async function main(): Promise<void> {
   // 4. Create Express app
   const app = express();
 
+  // Parse JSON bodies for API routes
+  app.use(express.json());
+
   // API routes
   const healthRouter = createHealthRouter({
     integrityReport: storage.integrityReport,
     integrityCheckedAt: storage.integrityCheckedAt,
   });
   app.use('/api', healthRouter);
+
+  const clientErrorRouter = createClientErrorRouter({
+    logger: storage.logger,
+  });
+  app.use('/api', clientErrorRouter);
 
   if (isProduction) {
     // Production: serve static files from dist/client
@@ -142,6 +152,9 @@ async function main(): Promise<void> {
     });
     app.use(vite.middlewares);
   }
+
+  // Error handler middleware — must be registered LAST
+  app.use(createErrorHandler(storage.logger));
 
   const server = app.listen(port, host, () => {
     storage?.logger.info('startup.complete', 'Server started', { host, port });
