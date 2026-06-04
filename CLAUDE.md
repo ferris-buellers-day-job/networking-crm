@@ -95,7 +95,7 @@ Backup: `~/NetworkingCRM-backup/` (git repo, outside iCloud)
 - `CHANGELOG.md` — shipped work, dated.
 
 ## Current sprint
-**Sprint 03 — Error Handling.** Spec does not exist yet; first task is to draft `specs/sprint-03-error-handling/spec.md`.
+**Sprint 04 — Contacts.** Spec does not exist yet; first task is to draft `specs/sprint-04-contacts/spec.md`.
 
 ## Sprint sequence (for context; don't pre-read)
 1. Skeleton — project scaffolding, nothing persistent.

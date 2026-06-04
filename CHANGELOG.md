@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.0] - 2026-06-03
+
+### Added
+
+- **Sprint 03 — Error Handling**
+  - **Error hierarchy** (ADR 010)
+    - `AppError` base class with `op`, `context`, `recoverable`, `toDebugBlock()`
+    - Typed subclasses: `ValidationError`, `StorageError`, `NetworkError`, `QuarantineError`
+    - Locked `recoverable` defaults per subclass (compile-time enforced)
+  - **Server-side error handling**
+    - Express error middleware with safety fallbacks (headersSent check, try/catch wrapper, plain-text fallback)
+    - HTTP status mapping: ValidationError→400, QuarantineError→422, others→500
+    - `POST /api/log-client-error` endpoint for client error reporting
+    - Health endpoint enhanced with `status` field ('ok' | 'degraded' | 'error')
+  - **Client-side error handling**
+    - `ApiError` and `NetworkError` classes with debug block support
+    - `apiFetch<T>()` wrapper — throws typed errors on non-2xx or network failure
+    - React `ErrorBoundary` with collapsible debug block, "Try again" (key reset), 3-strike disable logic
+    - Fire-and-forget error logging to server via raw fetch
+  - **Test suite**
+    - 48 new tests (174 → 222 total)
+    - Client tests use per-file `// @vitest-environment jsdom`; server tests stay on Node
+
+### Dependencies
+
+- Added `supertest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom` for testing
+
 ## [0.2.0] - 2026-05-23
 
 ### Added
