@@ -382,7 +382,7 @@ DEFAULT_COUNTRY=US   # ISO 3166-1 alpha-2, fallback for phone parsing
 {
   "dependencies": {
     "libphonenumber-js": "^1.11.0",
-    "react-router-dom": "^6.23.0"
+    "react-router-dom": "^7.17.0"
   }
 }
 ```

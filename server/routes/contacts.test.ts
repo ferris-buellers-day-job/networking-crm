@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import express, { type Express } from 'express';
 import request from 'supertest';
-import Database from 'better-sqlite3';
 import { CacheDb } from '../lib/cache-db.js';
 import { createRecentWrites } from '../lib/recent-writes.js';
 import { FileStore } from '../lib/file-store.js';

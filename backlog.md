@@ -21,6 +21,7 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Keyboard shortcuts (vim-style navigation, quick capture)
 - [ ] Tag/category filtering
 - [ ] Timeline view of interactions
+- [ ] Landing page: change `/` to render or redirect to `/contacts` once Contacts is the primary feature. Currently `/` renders the Sprint 02/03 health-check landing.
 
 ## Sprint 03.5 — Status & Toast UI
 

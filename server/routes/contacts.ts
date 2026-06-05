@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ValidationError } from '../lib/errors.js';
 import { normalizePhone } from '../lib/phone.js';
 import { FileStore, FileStoreQuarantineError } from '../lib/file-store.js';
-import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
+import { CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 
 export interface ContactsRouterDeps {
   contactsStore: FileStore<Contact>;

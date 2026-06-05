@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
-import { ErrorBoundary } from "./components/error-boundary.js";
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ErrorBoundary } from './components/error-boundary.js';
+import { ContactList } from './pages/contact-list.js';
+import { ContactDetail } from './pages/contact-detail.js';
 
 interface HealthResponse {
-  status: "ok" | "degraded" | "error";
+  status: 'ok' | 'degraded' | 'error';
   version: string;
   commit: string;
   integrity: {
@@ -13,11 +16,11 @@ interface HealthResponse {
 }
 
 function AppContent() {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [debug, setDebug] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/health")
+    fetch('/api/health')
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
@@ -25,28 +28,27 @@ function AppContent() {
         return res.json() as Promise<HealthResponse>;
       })
       .then((data) => {
-        if (data.status === "ok" || data.status === "degraded") {
-          setStatus("ready");
+        if (data.status === 'ok' || data.status === 'degraded') {
+          setStatus('ready');
         } else {
-          setStatus("error");
+          setStatus('error');
           setDebug(JSON.stringify(data, null, 2));
         }
       })
       .catch((err) => {
-        setStatus("error");
+        setStatus('error');
         setDebug(err instanceof Error ? err.message : String(err));
       });
   }, []);
 
-  if (status === "loading") {
+  if (status === 'loading') {
     return <div>Loading...</div>;
   }
 
-  if (status === "error") {
+  if (status === 'error') {
     return (
       <div>
         <p>Error — see debug</p>
-        {/* Debug block stub - full implementation in Sprint 03 */}
         {debug && <pre>{debug}</pre>}
       </div>
     );
@@ -57,8 +59,14 @@ function AppContent() {
 
 export function App() {
   return (
-    <ErrorBoundary>
-      <AppContent />
-    </ErrorBoundary>
+    <BrowserRouter>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<AppContent />} />
+          <Route path="/contacts" element={<ContactList />} />
+          <Route path="/contacts/:id" element={<ContactDetail />} />
+        </Routes>
+      </ErrorBoundary>
+    </BrowserRouter>
   );
 }
