@@ -94,8 +94,17 @@ Backup: `~/NetworkingCRM-backup/` (git repo, outside iCloud)
 - `backlog.md` — unsorted ideas. Read only if David asks about future features.
 - `CHANGELOG.md` — shipped work, dated.
 
+## Working with the reviewer
+
+Rules established from Sprint 04 sessions — apply in all future sessions:
+
+1. **Surface spec deviations before acting.** If a resolved dependency version, file name, or API surface differs from what the spec says, flag it and wait for approval before proceeding. Don't install, create, or commit first and explain afterward.
+2. **Behavioral rules live in CLAUDE.md, not in memory files.** Do not write `memory/feedback_*.md` files for coding conduct. Add rules here.
+3. **Scope changes require approval.** Adding new server infrastructure (new error classes, new middleware, new schemas) that isn't in the current sprint spec is scope creep. Propose it; don't do it.
+4. **Present the plan summary in chat before implementing.** End the summary with "Awaiting reviewer approval." Do not begin implementation until the user responds with explicit approval.
+
 ## Current sprint
-**Sprint 04 — Contacts.** Spec does not exist yet; first task is to draft `specs/sprint-04-contacts/spec.md`.
+**Sprint 05 — Interactions.** Spec not yet written.
 
 ## Sprint sequence (for context; don't pre-read)
 1. Skeleton — project scaffolding, nothing persistent.

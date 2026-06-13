@@ -22,6 +22,8 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Tag/category filtering
 - [ ] Timeline view of interactions
 - [ ] Landing page: change `/` to render or redirect to `/contacts` once Contacts is the primary feature. Currently `/` renders the Sprint 02/03 health-check landing.
+- [ ] Diacritic-insensitive search on contact list (e.g., "Muller" matches "Müller").
+- [ ] Trash view: list soft-deleted contacts with option to restore or permanently delete.
 
 ## Sprint 03.5 — Status & Toast UI
 
@@ -33,11 +35,13 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 
 ## Data & Reliability
 
+- [ ] Client/server fallback country alignment: server reads DEFAULT_COUNTRY env var; client hardcodes 'US'. Consider exposing server's default country via API so they stay in sync.
+- [ ] Email validation strictness: server uses Zod `z.string().email()`; client does no pre-validation. Consider inline email format check on submit.
 - [ ] Schema migration tooling (for future schemaVersion bumps)
 - [ ] Conflict detection for iCloud sync races
 - [ ] Backup verification (periodic integrity check of git backup)
 - [ ] FileStore.findFileById uses substring match on UUID — technically loose (e.g., a file named "abc-<uuid>-def.json" would match). Consider exact-match validation in future hardening.
-- [ ] Per-entity schema versions (Sprint 04+) — replace single EXPECTED_SCHEMA_VERSION constant with per-entity version map when Contact and Interaction entities ship.
+- [x] Per-entity schema versions (Sprint 04+) — replace single EXPECTED_SCHEMA_VERSION constant with per-entity version map when Contact and Interaction entities ship. *(Done in Sprint 04, ADR 012)*
 
 ## Polish
 

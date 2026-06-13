@@ -2,6 +2,56 @@
 
 All notable changes to this project are documented here.
 
+## [0.4.0] - 2026-06-13
+
+### Added
+
+- **Sprint 04 — Contacts**
+  - **Contact schema** (`server/schemas/contact.ts`)
+    - Zod schema with all fields: name, preferredName, linkedinUrl, phone, defaultCountry, email, company, title, notes, plus standard base fields (id, createdAt, updatedAt, deletedAt, schemaVersion)
+    - `CONTACT_SCHEMA_VERSION = 1` per ADR 012
+  - **Phone utilities** (`server/lib/phone.ts`, `client/lib/phone.ts`)
+    - `normalizePhone()` — E.164 normalization via libphonenumber-js, honors `DEFAULT_COUNTRY` env var, falls back to US
+    - `formatPhoneForDisplay()` — national format for matching country, international otherwise
+  - **Contacts API** (`server/routes/contacts.ts`)
+    - `GET /api/contacts` — list active contacts sorted by name case-insensitively
+    - `GET /api/contacts/:id` — single contact; 404 for missing, soft-deleted, or quarantined
+    - `POST /api/contacts` — create with phone normalization, email domain lowercasing, strict field validation
+    - `PUT /api/contacts/:id` — partial update; same normalizations; 404 for missing/deleted/quarantined
+    - `DELETE /api/contacts/:id` — soft delete (sets deletedAt); 404 for already-deleted/missing/quarantined
+  - **Contact list page** (`client/pages/contact-list.tsx`)
+    - Fetches and displays active contacts with name, company, email columns
+    - Displays preferredName in place of name when set
+    - Client-side search across name, company, email (not notes)
+    - Row links to `/contacts/:id`; "New Contact" link to `/contacts/new`
+    - Empty state, loading state, no-results state
+  - **Contact detail page** (`client/pages/contact-detail.tsx`)
+    - Displays all populated fields; phone formatted via `formatPhoneForDisplay()`
+    - LinkedIn URL rendered as `<a target="_blank">`
+    - Edit link → `/contacts/:id/edit`; Delete button with ConfirmModal
+    - 404 handled inline; other errors propagated to ErrorBoundary
+  - **Contact form page** (`client/pages/contact-form.tsx`)
+    - Create mode (`/contacts/new`) and edit mode (`/contacts/:id/edit`) via same component
+    - Phone validated at blur time against defaultCountry captured at that moment
+    - LinkedIn URL validated on submit
+    - Server ApiErrors shown inline; other errors propagated to ErrorBoundary
+  - **ConfirmModal component** (`client/components/confirm-modal.tsx`)
+    - Accessible dialog with focus trap (Cancel initial focus, Tab cycles, ESC cancels)
+    - Restores focus to opener on close
+  - **CountrySelect component** (`client/components/country-select.tsx`)
+    - Full country list from libphonenumber-js, sorted by Intl.DisplayNames
+    - Empty option maps to null
+  - **Client routing** — added `/contacts/new` and `/contacts/:id/edit` routes
+  - **ADR 012** — per-entity schema versioning
+
+### Dependencies
+
+- Added `react-router-dom` v7 for client-side routing
+
+### Test suite
+
+- 337 tests total (222 → 337, +115 new tests)
+
 ## [0.3.0] - 2026-06-03
 
 ### Added
