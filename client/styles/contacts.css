@@ -149,3 +149,125 @@
   text-align: center;
   color: #666;
 }
+
+/* Contact form page */
+
+.contact-form-page {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.contact-form-page h1 {
+  margin-top: 0;
+  font-size: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 4px;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.form-input--error,
+.form-select--error {
+  border-color: #cc0000;
+}
+
+.form-textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: #cc0000;
+}
+
+.submit-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #fff0f0;
+  border: 1px solid #ffcccc;
+  border-radius: 4px;
+  color: #cc0000;
+  font-size: 0.9rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-danger {
+  padding: 8px 16px;
+  background: #cc0000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-danger:hover {
+  background: #aa0000;
+}
+
+/* Confirm modal */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 6px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+  margin: 0 0 12px;
+  font-size: 1.2rem;
+}
+
+.modal-content p {
+  margin: 0 0 20px;
+  color: #444;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}

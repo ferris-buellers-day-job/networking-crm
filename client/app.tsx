@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from './components/error-boundary.js';
 import { ContactList } from './pages/contact-list.js';
 import { ContactDetail } from './pages/contact-detail.js';
+import { ContactForm } from './pages/contact-form.js';
 
 interface HealthResponse {
   status: 'ok' | 'degraded' | 'error';
@@ -64,6 +65,8 @@ export function App() {
         <Routes>
           <Route path="/" element={<AppContent />} />
           <Route path="/contacts" element={<ContactList />} />
+          <Route path="/contacts/new" element={<ContactForm />} />
+          <Route path="/contacts/:id/edit" element={<ContactForm />} />
           <Route path="/contacts/:id" element={<ContactDetail />} />
         </Routes>
       </ErrorBoundary>

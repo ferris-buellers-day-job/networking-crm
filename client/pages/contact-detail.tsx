@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { getContact, type Contact } from '../lib/contacts-api.js';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { getContact, deleteContact, type Contact } from '../lib/contacts-api.js';
 import { formatPhoneForDisplay } from '../lib/phone.js';
 import { ApiError } from '../lib/api-error.js';
+import { ConfirmModal } from '../components/confirm-modal.js';
 import '../styles/contacts.css';
 
 export function ContactDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -117,7 +121,35 @@ export function ContactDetail() {
         <Link to={`/contacts/${contact.id}/edit`} className="btn-secondary">
           Edit
         </Link>
+        <button
+          type="button"
+          className="btn-danger"
+          onClick={() => setShowDeleteModal(true)}
+          disabled={deleting}
+        >
+          Delete
+        </button>
       </div>
+
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Delete contact?"
+        message="This cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          setDeleting(true);
+          try {
+            await deleteContact(contact.id);
+            navigate('/contacts');
+          } catch (err) {
+            setDeleting(false);
+            setShowDeleteModal(false);
+            setError(err instanceof Error ? err : new Error(String(err)));
+          }
+        }}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,20 @@
 import { parsePhoneNumber, type CountryCode } from 'libphonenumber-js';
 
+export function normalizePhone(
+  phone: string | null | undefined,
+  defaultCountry?: string | null
+): string | null {
+  if (!phone || !phone.trim()) return null;
+  const country = (defaultCountry?.toUpperCase() as CountryCode | undefined) ?? 'US';
+  try {
+    const parsed = parsePhoneNumber(phone, country);
+    if (!parsed || !parsed.isValid()) return null;
+    return parsed.format('E.164');
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Format an E.164 phone number for display.
  *

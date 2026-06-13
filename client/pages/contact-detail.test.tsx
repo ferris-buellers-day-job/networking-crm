@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ContactDetail } from './contact-detail.js';
@@ -9,9 +9,10 @@ import type { Contact } from '../lib/contacts-api.js';
 
 vi.mock('../lib/contacts-api.js', () => ({
   getContact: vi.fn(),
+  deleteContact: vi.fn(),
 }));
 
-import { getContact } from '../lib/contacts-api.js';
+import { getContact, deleteContact } from '../lib/contacts-api.js';
 
 const TEST_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
 
@@ -164,5 +165,52 @@ describe('ContactDetail', () => {
     renderDetail();
 
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  });
+
+  it('renders a Delete button', async () => {
+    vi.mocked(getContact).mockResolvedValue({ contact: makeContact() });
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Alice Smith' });
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
+  });
+
+  it('clicking Delete opens confirm modal', async () => {
+    vi.mocked(getContact).mockResolvedValue({ contact: makeContact() });
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Alice Smith' });
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Delete contact?')).toBeInTheDocument();
+  });
+
+  it('cancelling the modal closes it without calling deleteContact', async () => {
+    vi.mocked(getContact).mockResolvedValue({ contact: makeContact() });
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Alice Smith' });
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(deleteContact).not.toHaveBeenCalled();
+  });
+
+  it('confirming delete calls deleteContact and navigates to /contacts', async () => {
+    vi.mocked(getContact).mockResolvedValue({ contact: makeContact() });
+    vi.mocked(deleteContact).mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter initialEntries={[`/contacts/${TEST_ID}`]}>
+        <Routes>
+          <Route path="/contacts/:id" element={<ContactDetail />} />
+          <Route path="/contacts" element={<div>Contacts list</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole('heading', { name: 'Alice Smith' });
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+
+    await screen.findByText('Contacts list');
+    expect(deleteContact).toHaveBeenCalledWith(TEST_ID);
   });
 });
