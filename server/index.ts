@@ -5,6 +5,7 @@ import { homedir } from 'os';
 import { createHealthRouter } from './routes/health.js';
 import { createClientErrorRouter } from './routes/client-error.js';
 import { createContactsRouter } from './routes/contacts.js';
+import { createInteractionsRouter } from './routes/interactions.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 import { initStorage, FatalStorageError, type StorageContext } from './services/storage.js';
 
@@ -139,8 +140,15 @@ async function main(): Promise<void> {
 
   const contactsRouter = createContactsRouter({
     contactsStore: storage.contactsStore,
+    interactionsStore: storage.interactionsStore,
   });
   app.use('/api/contacts', contactsRouter);
+
+  const interactionsRouter = createInteractionsRouter({
+    interactionsStore: storage.interactionsStore,
+    contactsStore: storage.contactsStore,
+  });
+  app.use('/api/interactions', interactionsRouter);
 
   if (isProduction) {
     // Production: serve static files from dist/client

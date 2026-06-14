@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,8 +7,10 @@ import request from 'supertest';
 import { CacheDb } from '../lib/cache-db.js';
 import { createRecentWrites } from '../lib/recent-writes.js';
 import { FileStore } from '../lib/file-store.js';
+import { StorageError } from '../lib/errors.js';
 import { createErrorHandler } from '../middleware/error-handler.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
+import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
 import { createContactsRouter } from './contacts.js';
 import type { Logger } from '../lib/logger.js';
 
@@ -41,17 +43,37 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
   };
 }
 
+function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: '2026-06-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    deletedAt: null,
+    schemaVersion: INTERACTION_SCHEMA_VERSION,
+    contactId: crypto.randomUUID(),
+    occurredAt: '2026-06-01T10:00:00.000Z',
+    type: 'meeting',
+    summary: null,
+    location: null,
+    ...overrides,
+  };
+}
+
 describe('contacts router', () => {
   let tempDir: string;
   let contactsDir: string;
+  let interactionsDir: string;
   let cacheDb: CacheDb;
   let store: FileStore<Contact>;
+  let interactionStore: FileStore<Interaction>;
   let app: Express;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'crm-contacts-test-'));
     contactsDir = path.join(tempDir, 'contacts');
+    interactionsDir = path.join(tempDir, 'interactions');
     await mkdir(contactsDir, { recursive: true });
+    await mkdir(interactionsDir, { recursive: true });
     await mkdir(path.join(tempDir, '.quarantine'), { recursive: true });
 
     const dbPath = path.join(tempDir, 'cache.db');
@@ -68,9 +90,19 @@ describe('contacts router', () => {
       { expectedSchemaVersion: CONTACT_SCHEMA_VERSION }
     );
 
+    interactionStore = new FileStore<Interaction>(
+      interactionsDir,
+      InteractionSchema,
+      { cacheDb, logger, recentWrites },
+      { expectedSchemaVersion: INTERACTION_SCHEMA_VERSION }
+    );
+
     app = express();
     app.use(express.json());
-    app.use('/api/contacts', createContactsRouter({ contactsStore: store }));
+    app.use(
+      '/api/contacts',
+      createContactsRouter({ contactsStore: store, interactionsStore: interactionStore })
+    );
     app.use(createErrorHandler(logger));
   });
 
@@ -422,6 +454,124 @@ describe('contacts router', () => {
       const res = await request(app).delete(`/api/contacts/${id}`);
       expect(res.status).toBe(404);
       expect(res.body.error.type).toBe('NotFound');
+    });
+
+    it('cascade: contact with no interactions returns 204 and contact is deleted', async () => {
+      const contact = makeContact({ name: 'Alice' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(204);
+
+      const record = await store.get(contact.id, { forceReload: true });
+      expect(record?.deletedAt).not.toBeNull();
+    });
+
+    it('cascade: 2 active interactions are all soft-deleted with same timestamp as contact', async () => {
+      const contact = makeContact({ name: 'Bob' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const i1 = makeInteraction({ contactId: contact.id });
+      const i2 = makeInteraction({ contactId: contact.id });
+      await interactionStore.save(i1, { preserveTimestamps: true });
+      await interactionStore.save(i2, { preserveTimestamps: true });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(204);
+
+      const contactRecord = await store.get(contact.id, { forceReload: true });
+      const contactDeletedAt = contactRecord?.deletedAt;
+      expect(contactDeletedAt).not.toBeNull();
+
+      const r1 = await interactionStore.get(i1.id, { forceReload: true });
+      const r2 = await interactionStore.get(i2.id, { forceReload: true });
+      expect(r1?.deletedAt).toBe(contactDeletedAt);
+      expect(r2?.deletedAt).toBe(contactDeletedAt);
+    });
+
+    it('cascade: already-deleted interaction is not re-written', async () => {
+      const contact = makeContact({ name: 'Carol' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const activeInteraction = makeInteraction({ contactId: contact.id });
+      const alreadyDeleted = makeInteraction({
+        contactId: contact.id,
+        deletedAt: '2026-05-01T00:00:00.000Z',
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      });
+      await interactionStore.save(activeInteraction, { preserveTimestamps: true });
+      await interactionStore.save(alreadyDeleted, { preserveTimestamps: true });
+
+      // Capture timestamps of the already-deleted interaction before cascade
+      const beforeDeletedAt = alreadyDeleted.deletedAt;
+      const beforeUpdatedAt = alreadyDeleted.updatedAt;
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(204);
+
+      // Already-deleted interaction must be unchanged
+      const unchangedRecord = await interactionStore.get(alreadyDeleted.id, { forceReload: true });
+      expect(unchangedRecord?.deletedAt).toBe(beforeDeletedAt);
+      expect(unchangedRecord?.updatedAt).toBe(beforeUpdatedAt);
+
+      // Active interaction must now be deleted
+      const activeRecord = await interactionStore.get(activeInteraction.id, { forceReload: true });
+      expect(activeRecord?.deletedAt).not.toBeNull();
+    });
+
+    it('cascade partial failure: if second interaction write throws, contact deletedAt is not set', async () => {
+      const contact = makeContact({ name: 'Dan' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const i1 = makeInteraction({ contactId: contact.id });
+      const i2 = makeInteraction({ contactId: contact.id });
+      await interactionStore.save(i1, { preserveTimestamps: true });
+      await interactionStore.save(i2, { preserveTimestamps: true });
+
+      // Let the first save through, throw on the second
+      const originalSave = interactionStore.save.bind(interactionStore);
+      let saveCallCount = 0;
+      vi.spyOn(interactionStore, 'save').mockImplementation(async (...args) => {
+        saveCallCount++;
+        if (saveCallCount === 2) {
+          throw new StorageError('Simulated disk failure', { op: 'test' });
+        }
+        return originalSave(...args);
+      });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(500);
+
+      vi.restoreAllMocks();
+
+      // Contact must still be active
+      const contactRecord = await store.get(contact.id, { forceReload: true });
+      expect(contactRecord?.deletedAt).toBeNull();
+
+      // Retry without the mock — cascade should complete successfully.
+      // i1 was already deleted in the first attempt; i2 and the contact were not.
+      const retryRes = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(retryRes.status).toBe(204);
+
+      const contactAfterRetry = await store.get(contact.id, { forceReload: true });
+      expect(contactAfterRetry?.deletedAt).not.toBeNull();
+
+      const r1 = await interactionStore.get(i1.id, { forceReload: true });
+      const r2 = await interactionStore.get(i2.id, { forceReload: true });
+      expect(r1?.deletedAt).not.toBeNull();
+      expect(r2?.deletedAt).not.toBeNull();
+    });
+
+    it('cascade idempotency: second DELETE on already-deleted contact returns 404', async () => {
+      const contact = makeContact({ name: 'Eve' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res1 = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res1.status).toBe(204);
+
+      const res2 = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res2.status).toBe(404);
+      expect(res2.body.error.type).toBe('NotFound');
     });
   });
 });

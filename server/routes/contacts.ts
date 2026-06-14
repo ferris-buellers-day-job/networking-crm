@@ -4,9 +4,11 @@ import { ValidationError } from '../lib/errors.js';
 import { normalizePhone } from '../lib/phone.js';
 import { FileStore, FileStoreQuarantineError } from '../lib/file-store.js';
 import { CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
+import { type Interaction } from '../schemas/interaction.js';
 
 export interface ContactsRouterDeps {
   contactsStore: FileStore<Contact>;
+  interactionsStore: FileStore<Interaction>;
 }
 
 const NOT_FOUND_RESPONSE = {
@@ -54,7 +56,7 @@ function resolvePhone(
 }
 
 export function createContactsRouter(deps: ContactsRouterDeps): Router {
-  const { contactsStore } = deps;
+  const { contactsStore, interactionsStore } = deps;
   const router = Router();
 
   // GET /api/contacts — non-deleted contacts, sorted by name ascending case-insensitive
@@ -193,7 +195,7 @@ export function createContactsRouter(deps: ContactsRouterDeps): Router {
     }
   });
 
-  // DELETE /api/contacts/:id — soft delete, 404 for already-deleted/missing/quarantined
+  // DELETE /api/contacts/:id — soft delete with cascade to active interactions
   router.delete('/:id', async (req, res, next) => {
     try {
       let existing: Contact | null;
@@ -212,13 +214,22 @@ export function createContactsRouter(deps: ContactsRouterDeps): Router {
       }
 
       const now = new Date().toISOString();
-      const deleted: Contact = {
-        ...existing,
-        deletedAt: now,
-        updatedAt: now,
-      };
 
-      await contactsStore.save(deleted, { preserveTimestamps: true });
+      // Cascade: soft-delete all active interactions for this contact first.
+      // Interactions are written before the contact so that if a write fails,
+      // the contact remains active and the cascade can be retried.
+      const allInteractions = await interactionsStore.getAll();
+      const activeInteractions = allInteractions.filter(
+        (i) => i.contactId === existing!.id && i.deletedAt === null
+      );
+      for (const interaction of activeInteractions) {
+        await interactionsStore.save(
+          { ...interaction, deletedAt: now, updatedAt: now },
+          { preserveTimestamps: true }
+        );
+      }
+
+      await contactsStore.save({ ...existing, deletedAt: now, updatedAt: now }, { preserveTimestamps: true });
       res.status(204).send();
     } catch (err) {
       next(err);

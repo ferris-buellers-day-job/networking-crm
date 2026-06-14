@@ -8,6 +8,7 @@ import { BackupService } from '../lib/backup-service.js';
 import { runIntegrityCheck, type IntegrityReport } from '../lib/integrity-check.js';
 import { FileStore } from '../lib/file-store.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
+import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
 
 /**
  * Error thrown when storage initialization fails fatally.
@@ -39,6 +40,7 @@ export interface StorageContext {
   integrityReport: IntegrityReport;
   integrityCheckedAt: string;
   contactsStore: FileStore<Contact>;
+  interactionsStore: FileStore<Interaction>;
 
   /** Start file watcher and backup scheduler */
   start(): void;
@@ -54,7 +56,7 @@ const UUID_PATTERN = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const EXPECTED_SCHEMA_VERSION = 1;
 
 // Entity directories to check for cache staleness
-const ENTITY_DIRECTORIES: string[] = ['contacts'];
+const ENTITY_DIRECTORIES: string[] = ['contacts', 'interactions'];
 
 /**
  * Initialize the storage layer.
@@ -184,6 +186,13 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     { expectedSchemaVersion: CONTACT_SCHEMA_VERSION }
   );
 
+  const interactionsStore = new FileStore<Interaction>(
+    path.join(config.dataPath, 'interactions'),
+    InteractionSchema,
+    { cacheDb, logger, recentWrites },
+    { expectedSchemaVersion: INTERACTION_SCHEMA_VERSION }
+  );
+
   logger.info('storage.init', 'Storage layer initialized successfully');
 
   // Build context with start/stop methods
@@ -199,6 +208,7 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     integrityReport,
     integrityCheckedAt,
     contactsStore,
+    interactionsStore,
 
     start(): void {
       if (isStarted) return;
