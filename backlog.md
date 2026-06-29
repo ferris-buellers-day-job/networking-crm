@@ -61,8 +61,6 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Apple Shortcut documentation for inbox capture — Sprint 06
 - [ ] Review queue UI (list ambiguous inbox entries, resolve by selecting correct contact) — Sprint 06
 - [ ] Decide final home for inbox processing trigger (status view, settings, contact list header) when inbox feature ships in Sprint 06
-- [ ] Add explicit test: POST /api/interactions returns 400 for invalid (non-ISO 8601) `occurredAt` string (criterion flagged in Sprint 05 acceptance.md)
-- [ ] Add explicit test: GET /api/interactions?contactId=:id returns empty array after contact cascade delete (criterion flagged in Sprint 05 acceptance.md)
 
 ## Ideas (Not Yet Scoped)
 
