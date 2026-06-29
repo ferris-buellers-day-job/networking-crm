@@ -12,6 +12,7 @@ import { createErrorHandler } from '../middleware/error-handler.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
 import { createContactsRouter } from './contacts.js';
+import { createInteractionsRouter } from './interactions.js';
 import type { Logger } from '../lib/logger.js';
 
 function createMockLogger(): Logger {
@@ -102,6 +103,10 @@ describe('contacts router', () => {
     app.use(
       '/api/contacts',
       createContactsRouter({ contactsStore: store, interactionsStore: interactionStore })
+    );
+    app.use(
+      '/api/interactions',
+      createInteractionsRouter({ interactionsStore: interactionStore, contactsStore: store })
     );
     app.use(createErrorHandler(logger));
   });
@@ -560,6 +565,23 @@ describe('contacts router', () => {
       const r2 = await interactionStore.get(i2.id, { forceReload: true });
       expect(r1?.deletedAt).not.toBeNull();
       expect(r2?.deletedAt).not.toBeNull();
+    });
+
+    it('cascade: GET /api/interactions?contactId after contact delete returns empty array', async () => {
+      const contact = makeContact({ name: 'Frank' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const i1 = makeInteraction({ contactId: contact.id });
+      const i2 = makeInteraction({ contactId: contact.id });
+      await interactionStore.save(i1, { preserveTimestamps: true });
+      await interactionStore.save(i2, { preserveTimestamps: true });
+
+      const deleteRes = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(deleteRes.status).toBe(204);
+
+      const listRes = await request(app).get(`/api/interactions?contactId=${contact.id}`);
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.interactions).toEqual([]);
     });
 
     it('cascade idempotency: second DELETE on already-deleted contact returns 404', async () => {

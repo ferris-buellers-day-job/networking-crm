@@ -313,6 +313,18 @@ describe('interactions router', () => {
       expect(res.body.error.type).toBe('ValidationError');
     });
 
+    it('returns 400 for invalid occurredAt (not ISO 8601)', async () => {
+      const contact = makeContact();
+      await contactStore.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app)
+        .post('/api/interactions')
+        .send({ contactId: contact.id, occurredAt: 'not-a-date', type: 'meeting' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.type).toBe('ValidationError');
+    });
+
     it('includes op "interactions.create" in debugBlock on failure', async () => {
       const res = await request(app).post('/api/interactions').send({});
       expect(res.status).toBe(400);
