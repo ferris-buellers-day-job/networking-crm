@@ -50,6 +50,20 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Loading states and skeleton screens
 - [ ] Accessibility audit (WCAG compliance)
 
+## Sprint 05 Additions
+
+- [ ] Edit interaction (PUT /api/interactions/:id + client form)
+- [ ] GET /api/interactions/:id
+- [ ] Per-interaction delete confirmation modal
+- [ ] Atomic group-write for contact cascade delete (currently accepts partial failure) — see ADR 013
+- [ ] Interaction metadata/tags field (revisit if extension needs emerge)
+- [ ] Inbox capture format, parser, processing route — Sprint 06
+- [ ] Apple Shortcut documentation for inbox capture — Sprint 06
+- [ ] Review queue UI (list ambiguous inbox entries, resolve by selecting correct contact) — Sprint 06
+- [ ] Decide final home for inbox processing trigger (status view, settings, contact list header) when inbox feature ships in Sprint 06
+- [ ] Add explicit test: POST /api/interactions returns 400 for invalid (non-ISO 8601) `occurredAt` string (criterion flagged in Sprint 05 acceptance.md)
+- [ ] Add explicit test: GET /api/interactions?contactId=:id returns empty array after contact cascade delete (criterion flagged in Sprint 05 acceptance.md)
+
 ## Ideas (Not Yet Scoped)
 
 - Relationship strength scoring based on interaction frequency

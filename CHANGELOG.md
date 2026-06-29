@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## [0.5.0] - 2026-06-28
+
+### Added
+
+- **Sprint 05 — Interactions**
+  - **Interaction schema** (`server/schemas/interaction.ts`)
+    - Zod schema with fields: contactId, occurredAt, type (meeting/call/email/message/other), summary (nullable), location (nullable), plus standard base fields
+    - `INTERACTION_SCHEMA_VERSION = 1` per ADR 012
+  - **Interactions API** (`server/routes/interactions.ts`)
+    - `GET /api/interactions?contactId=:id` — list non-deleted interactions for a contact, newest first; 400 if contactId absent
+    - `POST /api/interactions` — create; validates contactId references a non-deleted contact; strict field validation
+    - `DELETE /api/interactions/:id` — soft delete; 404 for missing/already-deleted/quarantined
+  - **Contact cascade soft-delete** (`server/routes/contacts.ts`)
+    - `DELETE /api/contacts/:id` now soft-deletes all non-deleted interactions before soft-deleting the contact
+    - Write order (interactions first) ensures partial failure leaves contact active and retryable — see ADR 013
+  - **Client interactions API module** (`client/lib/interactions-api.ts`)
+    - `fetchInteractions`, `createInteraction` via `apiFetch`; `deleteInteraction` via raw fetch (204 No Content pattern)
+  - **InteractionTimeline component** (`client/components/interaction-timeline.tsx`)
+    - Embedded in ContactDetail below contact fields, above action buttons
+    - Loading / empty / list states; rows expand/collapse on click; delete button is a sibling hit target (not nested)
+    - New interaction prepended to list on save; delete splices in place — no page reload
+  - **LogInteractionModal component** (`client/components/log-interaction-modal.tsx`)
+    - Fields: occurredAt (datetime-local, defaults to open-time), type (select, defaults to meeting), summary, location
+    - Focus trap mirrors ConfirmModal; ESC closes; ApiError 400 shown inline; non-400 propagates to ErrorBoundary
+  - **ADR 013** — cascade soft-delete write order and partial-failure semantics
+
+### Test count: 402 (25 files)
+
 ## [0.4.0] - 2026-06-13
 
 ### Added
