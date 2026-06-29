@@ -12,7 +12,14 @@ vi.mock('../lib/contacts-api.js', () => ({
   deleteContact: vi.fn(),
 }));
 
+vi.mock('../lib/interactions-api.js', () => ({
+  fetchInteractions: vi.fn(),
+  createInteraction: vi.fn(),
+  deleteInteraction: vi.fn(),
+}));
+
 import { getContact, deleteContact } from '../lib/contacts-api.js';
+import { fetchInteractions } from '../lib/interactions-api.js';
 
 const TEST_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
 
@@ -49,6 +56,7 @@ function renderDetail(id = TEST_ID) {
 describe('ContactDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchInteractions).mockResolvedValue({ interactions: [] });
   });
 
   it('renders contact name as heading', async () => {

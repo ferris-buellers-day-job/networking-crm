@@ -4,6 +4,7 @@ import { getContact, deleteContact, type Contact } from '../lib/contacts-api.js'
 import { formatPhoneForDisplay } from '../lib/phone.js';
 import { ApiError } from '../lib/api-error.js';
 import { ConfirmModal } from '../components/confirm-modal.js';
+import { InteractionTimeline } from '../components/interaction-timeline.js';
 import '../styles/contacts.css';
 
 export function ContactDetail() {
@@ -116,6 +117,8 @@ export function ContactDetail() {
           </>
         )}
       </dl>
+
+      <InteractionTimeline contactId={id!} />
 
       <div className="contact-actions">
         <Link to={`/contacts/${contact.id}/edit`} className="btn-secondary">
