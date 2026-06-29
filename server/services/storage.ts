@@ -9,6 +9,7 @@ import { runIntegrityCheck, type IntegrityReport } from '../lib/integrity-check.
 import { FileStore } from '../lib/file-store.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
+import { InboxEntrySchema, INBOX_ENTRY_SCHEMA_VERSION, type InboxEntry } from '../schemas/inbox-entry.js';
 
 /**
  * Error thrown when storage initialization fails fatally.
@@ -41,6 +42,7 @@ export interface StorageContext {
   integrityCheckedAt: string;
   contactsStore: FileStore<Contact>;
   interactionsStore: FileStore<Interaction>;
+  inboxEntryStore: FileStore<InboxEntry>;
 
   /** Start file watcher and backup scheduler */
   start(): void;
@@ -56,7 +58,7 @@ const UUID_PATTERN = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const EXPECTED_SCHEMA_VERSION = 1;
 
 // Entity directories to check for cache staleness
-const ENTITY_DIRECTORIES: string[] = ['contacts', 'interactions'];
+const ENTITY_DIRECTORIES: string[] = ['contacts', 'interactions', 'inbox_queue'];
 
 /**
  * Initialize the storage layer.
@@ -85,7 +87,7 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     backupPath: config.backupPath,
   });
 
-  // 2. Initialize data directory structure
+  // 2. Initialize data directory structure (inbox_queue dir created inside)
   try {
     await initDataDirectory(config.dataPath);
   } catch (err) {
@@ -193,6 +195,13 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     { expectedSchemaVersion: INTERACTION_SCHEMA_VERSION }
   );
 
+  const inboxEntryStore = new FileStore<InboxEntry>(
+    path.join(config.dataPath, 'inbox_queue'),
+    InboxEntrySchema,
+    { cacheDb, logger, recentWrites },
+    { expectedSchemaVersion: INBOX_ENTRY_SCHEMA_VERSION }
+  );
+
   logger.info('storage.init', 'Storage layer initialized successfully');
 
   // Build context with start/stop methods
@@ -209,6 +218,7 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     integrityCheckedAt,
     contactsStore,
     interactionsStore,
+    inboxEntryStore,
 
     start(): void {
       if (isStarted) return;
@@ -255,6 +265,7 @@ async function initDataDirectory(dataPath: string): Promise<void> {
     dataPath,
     path.join(dataPath, 'contacts'),
     path.join(dataPath, 'interactions'),
+    path.join(dataPath, 'inbox_queue'),
     path.join(dataPath, 'logs'),
     path.join(dataPath, '.quarantine'),
   ];

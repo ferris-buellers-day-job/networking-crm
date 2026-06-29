@@ -111,7 +111,7 @@ export type InboxEntry = z.infer<typeof InboxEntrySchema>;
 - `candidateContactIds`: populated when `matchState = 'ambiguous'`; empty array otherwise.
 - `contactId`, `interactionId`: set when `status = 'resolved'`; null otherwise.
 
-InboxEntry JSON files live at `DATA_PATH/inbox-queue/{id}.json`. The `id` field is the standard ADR 006 UUID; `rawId` is the 8-hex ID from the entry.
+InboxEntry JSON files live at `DATA_PATH/inbox_queue/{id}.json`. The `id` field is the standard ADR 006 UUID; `rawId` is the 8-hex ID from the entry.
 
 ### 3. Storage wiring
 
@@ -121,7 +121,7 @@ Add `inboxEntryStore` to `StorageContext` and `initStorage()` in `server/service
 import { InboxEntrySchema, INBOX_ENTRY_SCHEMA_VERSION } from '../schemas/inbox-entry.js';
 
 const inboxEntryStore = new FileStore<InboxEntry>(
-  path.join(dataPath, 'inbox-queue'),
+  path.join(dataPath, 'inbox_queue'),
   InboxEntrySchema,
   { cacheDb, logger, recentWrites },
   { expectedSchemaVersion: INBOX_ENTRY_SCHEMA_VERSION }
