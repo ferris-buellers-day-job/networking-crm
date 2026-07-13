@@ -2,6 +2,50 @@
 
 All notable changes to this project are documented here.
 
+## [0.6.0] - 2026-07-12
+
+### Added
+
+- **Sprint 06 — Inbox Capture**
+  - **Inbox format and ADR 015** (`docs/decisions/015-inbox-format.md`)
+    - `---`-delimited block format with required fields `id` (8 hex chars), `date` (ISO 8601 with offset or Z), `contact`; optional `type`, `location`, `summary`
+    - `id` field is idempotency key (rawId); prevents duplicate processing on re-run
+  - **Inbox parser** (`server/lib/inbox-parser.ts`)
+    - Pure `parseInbox()` function; strict ISO 8601 validation with UTC-Z conversion; defaults `parsedType` to `'meeting'`; surfaces parse errors as `ParsedEntry` records rather than throwing
+  - **InboxEntry schema** (`server/schemas/inbox-entry.ts`)
+    - Zod schema with `rawId`, `rawText`, `status`, `matchState`, parsed fields, `parseError`, `candidateContactIds`, `contactId`, `interactionId`; `INBOX_ENTRY_SCHEMA_VERSION = 1`
+  - **Inbox processing route — `POST /api/inbox/process`**
+    - Reads `inbox.txt` as a Buffer (byte-safe), parses all entries, matches contacts by name/preferredName (case-insensitive, whitespace-normalised) — see ADR 014
+    - Auto-matched entries (exactly one contact): creates Interaction + resolves InboxEntry in one pass
+    - Ambiguous (2+ matches): creates pending InboxEntry with `candidateContactIds`
+    - Unmatched (0 matches): creates pending InboxEntry with `matchState: 'unmatched'`
+    - Parse errors: creates pending InboxEntry with `matchState: 'parse_error'` and `parseError` message
+    - rawId idempotency: skips entries whose `rawId` already exists; skipped entries not re-appended to audit log
+    - Byte-level concurrent-append safety: writes back only bytes beyond the initial read position, preserving multibyte UTF-8 sequences appended by the iPhone during processing
+    - Appends processed `rawText` to `inbox-processed.txt` as audit log; clears `inbox.txt` to the tail
+  - **Inbox queue routes**
+    - `GET /api/inbox` — returns pending entries sorted by `createdAt` ascending; ambiguous entries enriched with `candidateContacts: {id, name}[]` resolved server-side, deleted candidates omitted, fallback message when all candidates deleted
+    - `PATCH /api/inbox/:id/resolve` — creates Interaction, marks entry resolved; 400 for parse_error entries, non-pending entries, deleted/nonexistent contacts, extra body fields; 404 for unknown id
+    - `PATCH /api/inbox/:id/discard` — marks entry discarded; 400 for non-pending; 404 for unknown id
+  - **Contact-matching strategy — ADR 014** (`docs/decisions/014-inbox-contact-matching.md`)
+    - Exact-match (normalised) against `name` and `preferredName`; no fuzzy matching
+  - **Client inbox API module** (`client/lib/inbox-api.ts`)
+    - `processInbox`, `fetchInboxQueue`, `resolveInboxEntry`, `discardInboxEntry` via `apiFetch`; `InboxEntry` type includes `candidateContacts: CandidateContact[]`
+  - **Inbox page** (`client/pages/inbox.tsx`, `/inbox` route)
+    - "Process inbox" button with inline result string; queue list re-fetched after each run
+    - Loading / empty / list states; per-entry cards with contact, type, formatted date, truncated summary
+    - `parse_error` cards show `parseError` message and `rawText` in `<pre>`; Discard only (no Resolve)
+    - `unmatched` cards show "No match found for '…'"; Resolve + Discard
+    - `ambiguous` cards show candidate contact names (server-resolved); fallback "Matching contacts no longer available." when all candidates are deleted; Resolve + Discard
+    - Errors propagate to ErrorBoundary
+  - **ResolveInboxModal component** (`client/components/resolve-inbox-modal.tsx`)
+    - Client-side contact search (name/preferredName); keyboard-accessible (Enter selects first result, Tab cycles focus, ESC closes)
+    - ApiError 400 shown inline; non-400 propagates to ErrorBoundary; focus returns to opener on close
+  - **Apple Shortcut setup guide** (`docs/inbox-shortcut-setup.md`)
+    - Step-by-step Shortcut construction for iOS; GUID-based `id` generation; ISO 8601 offset date; AirDrop installation; verification steps
+
+### Test count: 506 total (30 files); 214 Sprint 06-specific tests across 15 files
+
 ## [0.5.0] - 2026-06-28
 
 ### Added

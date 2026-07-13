@@ -41,6 +41,7 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Conflict detection for iCloud sync races
 - [ ] Backup verification (periodic integrity check of git backup)
 - [ ] FileStore.findFileById uses substring match on UUID — technically loose (e.g., a file named "abc-<uuid>-def.json" would match). Consider exact-match validation in future hardening.
+- [ ] Flaky test: `server/lib/file-watcher.test.ts` intermittently times out (pre-existing, Sprint 02) — investigate and stabilize so it isn't mistaken for a future regression.
 - [x] Per-entity schema versions (Sprint 04+) — replace single EXPECTED_SCHEMA_VERSION constant with per-entity version map when Contact and Interaction entities ship. *(Done in Sprint 04, ADR 012)*
 
 ## Polish
@@ -57,10 +58,29 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Per-interaction delete confirmation modal
 - [ ] Atomic group-write for contact cascade delete (currently accepts partial failure) — see ADR 013
 - [ ] Interaction metadata/tags field (revisit if extension needs emerge)
-- [ ] Inbox capture format, parser, processing route — Sprint 06
-- [ ] Apple Shortcut documentation for inbox capture — Sprint 06
-- [ ] Review queue UI (list ambiguous inbox entries, resolve by selecting correct contact) — Sprint 06
-- [ ] Decide final home for inbox processing trigger (status view, settings, contact list header) when inbox feature ships in Sprint 06
+- [x] Inbox capture format, parser, processing route — *(Done Sprint 06)*
+- [x] Apple Shortcut documentation for inbox capture — *(Done Sprint 06)*
+- [x] Review queue UI (list ambiguous inbox entries, resolve by selecting correct contact) — *(Done Sprint 06)*
+- [ ] Decide final home for inbox processing trigger (status view, settings, contact list header)
+
+## Sprint 06 Additions
+
+- [ ] **rawId collision for id-less parse_error entries** — entries missing an `id` field all get `rawId=''` and collapse to a single record on reprocessing (second and later id-less malformed entries are silently skipped as duplicates). Needs a distinct fallback key, e.g. content hash of `rawText`.
+
+
+- [ ] "Create new contact" flow from inbox review queue
+- [ ] Fuzzy or prefix contact matching in inbox processing
+- [ ] `GET /api/inbox/:id` — single inbox entry endpoint
+- [ ] `PUT /api/inbox/:id` — edit parsed fields before resolving
+- [ ] Discard confirmation modal in review queue
+- [ ] Pagination or search within the review queue
+- [ ] iCloud sync-lag retry on `inbox.txt` read
+- [ ] Apple Watch Shortcut variant
+- [ ] Per-entry pending-count badge on `/inbox` navigation link
+- [ ] Apple Shortcut source export (share `.shortcut` file as a project asset)
+- [ ] Dedicated InboxEntry failure state for storage errors during processing (currently overloaded onto `'unmatched'`)
+- [x] Ambiguous inbox card: display actual candidate contact names — *(Done Sprint 06 session 2)*
+- [ ] Test coverage: inbox card `parsedDate` locale formatting and `parsedSummary` 80-char truncation are rendered but unasserted (acceptance criterion line 77 remains open)
 
 ## Ideas (Not Yet Scoped)
 
