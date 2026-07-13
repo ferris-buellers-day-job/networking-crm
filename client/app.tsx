@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/error-boundary.js';
 import { ContactList } from './pages/contact-list.js';
 import { ContactDetail } from './pages/contact-detail.js';
 import { ContactForm } from './pages/contact-form.js';
+import { InboxPage } from './pages/inbox.js';
 
 interface HealthResponse {
   status: 'ok' | 'degraded' | 'error';
@@ -68,6 +69,7 @@ export function App() {
           <Route path="/contacts/new" element={<ContactForm />} />
           <Route path="/contacts/:id/edit" element={<ContactForm />} />
           <Route path="/contacts/:id" element={<ContactDetail />} />
+          <Route path="/inbox" element={<InboxPage />} />
         </Routes>
       </ErrorBoundary>
     </BrowserRouter>

@@ -272,6 +272,52 @@ describe('inbox router', () => {
       expect(await interactionStore.getAll()).toHaveLength(1);
     });
 
+    it('rawId idempotency: re-running does not duplicate an ambiguous entry', async () => {
+      const c1 = makeContact({ name: 'Alice Smith' });
+      const c2 = makeContact({ name: 'Alice Smith', preferredName: 'Al' });
+      await contactStore.save(c1, { preserveTimestamps: true });
+      await contactStore.save(c2, { preserveTimestamps: true });
+      const content = inboxEntry({ id: 'b4c8d2e1', date: VALID_DATE, contact: 'Alice Smith' });
+      await writeFile(inboxPath, content);
+
+      await request(app).post('/api/inbox/process');
+      await writeFile(inboxPath, content);
+      const res2 = await request(app).post('/api/inbox/process');
+
+      expect(res2.status).toBe(200);
+      expect(res2.body).toEqual({ processed: 0, queued: 0 });
+      expect(await inboxEntryStore.getAll()).toHaveLength(1);
+    });
+
+    it('rawId idempotency: re-running does not duplicate an unmatched entry', async () => {
+      const content = inboxEntry({ id: 'c5d9e3f2', date: VALID_DATE, contact: 'Nobody Here' });
+      await writeFile(inboxPath, content);
+
+      await request(app).post('/api/inbox/process');
+      await writeFile(inboxPath, content);
+      const res2 = await request(app).post('/api/inbox/process');
+
+      expect(res2.status).toBe(200);
+      expect(res2.body).toEqual({ processed: 0, queued: 0 });
+      expect(await inboxEntryStore.getAll()).toHaveLength(1);
+    });
+
+    it('rawId idempotency: re-running does not duplicate a parse_error entry', async () => {
+      // id is valid (so rawId = 'd6e0f4a3') but date is absent → parse_error
+      const content = inboxEntry({ id: 'd6e0f4a3', contact: 'Alice Smith' });
+      await writeFile(inboxPath, content);
+
+      await request(app).post('/api/inbox/process');
+      await writeFile(inboxPath, content);
+      const res2 = await request(app).post('/api/inbox/process');
+
+      expect(res2.status).toBe(200);
+      expect(res2.body).toEqual({ processed: 0, queued: 0 });
+      const entries = await inboxEntryStore.getAll();
+      expect(entries).toHaveLength(1);
+      expect(entries[0].matchState).toBe('parse_error');
+    });
+
     it('skipped entries (rawId idempotency) are NOT re-appended to inbox-processed.txt', async () => {
       const contact = makeContact({ name: 'Alice Smith' });
       await contactStore.save(contact, { preserveTimestamps: true });
@@ -387,6 +433,66 @@ describe('inbox router', () => {
 
       const res = await request(app).get('/api/inbox');
       expect(res.body.entries).toHaveLength(0);
+    });
+
+    it('ambiguous entry has candidateContacts resolved to display names', async () => {
+      const c1 = makeContact({ name: 'Alice Smith', preferredName: null });
+      const c2 = makeContact({ name: 'Robert Jones', preferredName: 'Bob' });
+      await contactStore.save(c1, { preserveTimestamps: true });
+      await contactStore.save(c2, { preserveTimestamps: true });
+
+      const entry = makeInboxEntry({
+        matchState: 'ambiguous',
+        candidateContactIds: [c1.id, c2.id],
+      });
+      await inboxEntryStore.save(entry, { preserveTimestamps: true });
+
+      const res = await request(app).get('/api/inbox');
+      expect(res.status).toBe(200);
+      const [e] = res.body.entries;
+      expect(e.candidateContacts).toHaveLength(2);
+      // c1 has no preferredName → display name is name
+      expect(e.candidateContacts).toContainEqual({ id: c1.id, name: 'Alice Smith' });
+      // c2 has preferredName → display name is preferredName
+      expect(e.candidateContacts).toContainEqual({ id: c2.id, name: 'Bob' });
+    });
+
+    it('deleted candidate contact is omitted from candidateContacts', async () => {
+      const c1 = makeContact({ name: 'Alice Smith' });
+      const c2 = makeContact({ name: 'Alice Smith', deletedAt: '2026-07-12T00:00:00.000Z' });
+      await contactStore.save(c1, { preserveTimestamps: true });
+      await contactStore.save(c2, { preserveTimestamps: true });
+
+      // Verify the store actually persisted c2 with deletedAt set — confirms the test
+      // exercises the GET filter and not a silent write-rejection or timestamp-null.
+      const allContacts = await contactStore.getAll({ includeDeleted: true });
+      const storedC2 = allContacts.find((c) => c.id === c2.id);
+      expect(storedC2).toBeDefined();
+      expect(storedC2!.deletedAt).toBe('2026-07-12T00:00:00.000Z');
+
+      const entry = makeInboxEntry({
+        matchState: 'ambiguous',
+        candidateContactIds: [c1.id, c2.id],
+      });
+      await inboxEntryStore.save(entry, { preserveTimestamps: true });
+
+      const res = await request(app).get('/api/inbox');
+      expect(res.status).toBe(200);
+      const [e] = res.body.entries;
+      expect(e.candidateContacts).toHaveLength(1);
+      expect(e.candidateContacts[0].id).toBe(c1.id);
+    });
+
+    it('non-ambiguous entries have empty candidateContacts', async () => {
+      const unmatched = makeInboxEntry({ rawId: 'uu000001', matchState: 'unmatched' });
+      const parseErr  = makeInboxEntry({ rawId: 'pp000001', matchState: 'parse_error', parseError: 'bad id' });
+      await inboxEntryStore.save(unmatched, { preserveTimestamps: true });
+      await inboxEntryStore.save(parseErr,  { preserveTimestamps: true });
+
+      const res = await request(app).get('/api/inbox');
+      for (const e of res.body.entries) {
+        expect(e.candidateContacts).toEqual([]);
+      }
     });
   });
 

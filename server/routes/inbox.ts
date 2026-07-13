@@ -202,12 +202,36 @@ export function createInboxRouter(deps: InboxRouterDeps): Router {
   });
 
   // GET /api/inbox — list pending entries, oldest first
+  // Ambiguous entries are enriched with candidateContacts: {id, name}[] resolved
+  // from the contact store. Deleted or missing candidates are omitted.
+  // Non-ambiguous entries receive candidateContacts: [].
   router.get('/', async (req, res, next) => {
     try {
       const all = await inboxEntryStore.getAll();
-      const entries = all
+      const pending = all
         .filter((e) => e.status === 'pending')
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+      const hasAmbiguous = pending.some((e) => e.matchState === 'ambiguous');
+      let contactById = new Map<string, Contact>();
+      if (hasAmbiguous) {
+        const contacts = await contactsStore.getAll();
+        for (const c of contacts) {
+          if (c.deletedAt === null) contactById.set(c.id, c);
+        }
+      }
+
+      const entries = pending.map((entry) => {
+        if (entry.matchState !== 'ambiguous') return { ...entry, candidateContacts: [] };
+        const candidateContacts = entry.candidateContactIds
+          .map((cid) => {
+            const c = contactById.get(cid);
+            return c ? { id: c.id, name: c.preferredName ?? c.name } : null;
+          })
+          .filter((c): c is { id: string; name: string } => c !== null);
+        return { ...entry, candidateContacts };
+      });
+
       res.json({ entries });
     } catch (err) {
       next(err);
