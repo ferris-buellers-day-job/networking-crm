@@ -26,6 +26,7 @@ const UserSettableFields = z.object({
   company: z.string().max(200).nullable().optional(),
   title: z.string().max(200).nullable().optional(),
   notes: z.string().max(50000).nullable().optional(),
+  tier: z.enum(['inner_circle', 'active', 'dormant']).nullable().optional(),
 });
 
 // .strict() rejects id, createdAt, updatedAt, deletedAt, schemaVersion, and any unknown field.
@@ -126,6 +127,7 @@ export function createContactsRouter(deps: ContactsRouterDeps): Router {
         company: input.company ?? null,
         title: input.title ?? null,
         notes: input.notes ?? null,
+        tier: input.tier ?? null,
       };
 
       await contactsStore.save(contact, { preserveTimestamps: true });
@@ -186,6 +188,7 @@ export function createContactsRouter(deps: ContactsRouterDeps): Router {
         company: 'company' in input ? (input.company ?? null) : existing.company,
         title: 'title' in input ? (input.title ?? null) : existing.title,
         notes: 'notes' in input ? (input.notes ?? null) : existing.notes,
+        tier: 'tier' in input ? (input.tier ?? null) : existing.tier,
       };
 
       await contactsStore.save(updated, { preserveTimestamps: true });

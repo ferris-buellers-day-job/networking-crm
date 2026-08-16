@@ -31,6 +31,9 @@ export const ContactSchema = BaseRecordSchema.extend({
   company: z.string().max(200).nullable(),
   title: z.string().max(200).nullable(),
   notes: z.string().max(50000).nullable(),
+  // Additive nullable field per ADR 016 — .default(null) coerces absent key to null on
+  // existing v1 records. CONTACT_SCHEMA_VERSION stays at 1.
+  tier: z.enum(['inner_circle', 'active', 'dormant']).nullable().default(null),
 });
 
 export type Contact = z.infer<typeof ContactSchema>;

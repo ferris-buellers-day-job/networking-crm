@@ -7,10 +7,10 @@ import { ContactDetail } from './contact-detail.js';
 import { ApiError } from '../lib/api-error.js';
 import type { Contact } from '../lib/contacts-api.js';
 
-vi.mock('../lib/contacts-api.js', () => ({
-  getContact: vi.fn(),
-  deleteContact: vi.fn(),
-}));
+vi.mock('../lib/contacts-api.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/contacts-api.js')>();
+  return { ...actual, getContact: vi.fn(), deleteContact: vi.fn() };
+});
 
 vi.mock('../lib/interactions-api.js', () => ({
   fetchInteractions: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock('../lib/interactions-api.js', () => ({
   deleteInteraction: vi.fn(),
 }));
 
-import { getContact, deleteContact } from '../lib/contacts-api.js';
+import { getContact, deleteContact, TIER_LABELS } from '../lib/contacts-api.js';
 import { fetchInteractions } from '../lib/interactions-api.js';
 
 const TEST_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -39,6 +39,7 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     company: null,
     title: null,
     notes: null,
+    tier: null,
     ...overrides,
   };
 }
@@ -220,5 +221,23 @@ describe('ContactDetail', () => {
 
     await screen.findByText('Contacts list');
     expect(deleteContact).toHaveBeenCalledWith(TEST_ID);
+  });
+
+  describe('tier badge', () => {
+    it('shows tier badge with correct label for a tiered contact', async () => {
+      vi.mocked(getContact).mockResolvedValue({ contact: makeContact({ tier: 'dormant' }) });
+      renderDetail();
+      await screen.findByRole('heading', { name: 'Alice Smith' });
+      const badge = document.querySelector('.tier-badge--dormant');
+      expect(badge).not.toBeNull();
+      expect(badge?.textContent).toBe(TIER_LABELS['dormant']);
+    });
+
+    it('shows no tier badge for an untiered contact', async () => {
+      vi.mocked(getContact).mockResolvedValue({ contact: makeContact({ tier: null }) });
+      renderDetail();
+      await screen.findByRole('heading', { name: 'Alice Smith' });
+      expect(document.querySelector('.tier-badge')).toBeNull();
+    });
   });
 });

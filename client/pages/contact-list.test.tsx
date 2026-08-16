@@ -7,11 +7,12 @@ import { ContactList } from './contact-list.js';
 import { ErrorBoundary } from '../components/error-boundary.js';
 import type { Contact } from '../lib/contacts-api.js';
 
-vi.mock('../lib/contacts-api.js', () => ({
-  fetchContacts: vi.fn(),
-}));
+vi.mock('../lib/contacts-api.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/contacts-api.js')>();
+  return { ...actual, fetchContacts: vi.fn() };
+});
 
-import { fetchContacts } from '../lib/contacts-api.js';
+import { fetchContacts, TIER_LABELS } from '../lib/contacts-api.js';
 
 function makeContact(overrides: Partial<Contact> = {}): Contact {
   return {
@@ -29,6 +30,7 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     company: null,
     title: null,
     notes: null,
+    tier: null,
     ...overrides,
   };
 }
@@ -227,5 +229,132 @@ describe('ContactList', () => {
 
     console.error = originalError;
     global.fetch = originalFetch;
+  });
+
+  describe('tier badge', () => {
+    it('shows tier badge with correct label for a tiered contact', async () => {
+      const contact = makeContact({ name: 'Alice', tier: 'inner_circle' });
+      vi.mocked(fetchContacts).mockResolvedValue({ contacts: [contact] });
+      renderList();
+      await screen.findByText('Alice');
+      // Use class selector so the assertion targets the badge element, not the
+      // filter <select> option which also contains the tier label text.
+      const badge = document.querySelector('.tier-badge--inner_circle');
+      expect(badge).not.toBeNull();
+      expect(badge?.textContent).toBe(TIER_LABELS['inner_circle']);
+    });
+
+    it('shows no tier badge for an untiered contact', async () => {
+      const contact = makeContact({ name: 'Bob', tier: null });
+      vi.mocked(fetchContacts).mockResolvedValue({ contacts: [contact] });
+      renderList();
+      await screen.findByText('Bob');
+      // queryByText would find the filter <option> elements; check badge class instead.
+      expect(document.querySelector('.tier-badge')).toBeNull();
+    });
+  });
+
+  describe('tier filter', () => {
+    function setTierFilter(value: string) {
+      fireEvent.change(screen.getByRole('combobox', { name: /filter by tier/i }), {
+        target: { value },
+      });
+    }
+
+    it('"All" (default) shows all contacts', async () => {
+      vi.mocked(fetchContacts).mockResolvedValue({
+        contacts: [
+          makeContact({ name: 'Alice', tier: 'inner_circle' }),
+          makeContact({ name: 'Bob', tier: 'active' }),
+          makeContact({ name: 'Carol', tier: null }),
+        ],
+      });
+      renderList();
+      await screen.findByText('Alice');
+      expect(screen.getByText('Bob')).toBeInTheDocument();
+      expect(screen.getByText('Carol')).toBeInTheDocument();
+    });
+
+    it('"Inner Circle" filter shows only inner_circle contacts', async () => {
+      vi.mocked(fetchContacts).mockResolvedValue({
+        contacts: [
+          makeContact({ name: 'Alice', tier: 'inner_circle' }),
+          makeContact({ name: 'Bob', tier: 'active' }),
+        ],
+      });
+      renderList();
+      await screen.findByText('Alice');
+      setTierFilter('inner_circle');
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+    });
+
+    it('"Active" filter shows only active contacts', async () => {
+      vi.mocked(fetchContacts).mockResolvedValue({
+        contacts: [
+          makeContact({ name: 'Alice', tier: 'active' }),
+          makeContact({ name: 'Bob', tier: 'dormant' }),
+        ],
+      });
+      renderList();
+      await screen.findByText('Alice');
+      setTierFilter('active');
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+    });
+
+    it('"Dormant" filter shows only dormant contacts', async () => {
+      vi.mocked(fetchContacts).mockResolvedValue({
+        contacts: [
+          makeContact({ name: 'Alice', tier: 'dormant' }),
+          makeContact({ name: 'Bob', tier: 'active' }),
+        ],
+      });
+      renderList();
+      await screen.findByText('Alice');
+      setTierFilter('dormant');
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+    });
+
+    it('"Untiered" filter shows only contacts with tier null', async () => {
+      vi.mocked(fetchContacts).mockResolvedValue({
+        contacts: [
+          makeContact({ name: 'Alice', tier: null }),
+          makeContact({ name: 'Bob', tier: 'active' }),
+        ],
+      });
+      renderList();
+      await screen.findByText('Alice');
+      setTierFilter('untiered');
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+    });
+
+    it('tier filter composes with text search as a genuine intersection', async () => {
+      // Text filter alone: "alice" matches both Alice Smith (active) and Alice Jones (inner_circle).
+      // Tier filter alone: "active" matches Alice Smith and Bob (active).
+      // Intersection: only Alice Smith matches both.
+      vi.mocked(fetchContacts).mockResolvedValue({
+        contacts: [
+          makeContact({ name: 'Alice Smith', tier: 'active' }),
+          makeContact({ name: 'Alice Jones', tier: 'inner_circle' }),
+          makeContact({ name: 'Bob Active', tier: 'active' }),
+        ],
+      });
+      renderList();
+      await screen.findByText('Alice Smith');
+
+      fireEvent.change(screen.getByRole('textbox', { name: /search/i }), {
+        target: { value: 'alice' },
+      });
+      setTierFilter('active');
+
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+      // Excluded by tier filter (inner_circle, not active):
+      expect(screen.queryByText('Alice Jones')).not.toBeInTheDocument();
+      // Excluded by text filter (no "alice" in name):
+      expect(screen.queryByText('Bob Active')).not.toBeInTheDocument();
+    });
   });
 });

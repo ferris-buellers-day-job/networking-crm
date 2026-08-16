@@ -4,8 +4,11 @@ import {
   getContact,
   createContact,
   updateContact,
+  TIER_LABELS,
+  TIER_VALUES,
   type ContactInput,
   type Contact,
+  type ContactTier,
 } from '../lib/contacts-api.js';
 import { normalizePhone } from '../lib/phone.js';
 import { ApiError } from '../lib/api-error.js';
@@ -22,6 +25,7 @@ interface FormFields {
   company: string;
   title: string;
   notes: string;
+  tier: ContactTier | null;
 }
 
 function emptyFields(): FormFields {
@@ -35,6 +39,7 @@ function emptyFields(): FormFields {
     company: '',
     title: '',
     notes: '',
+    tier: null,
   };
 }
 
@@ -49,6 +54,7 @@ function fieldsFromContact(contact: Contact): FormFields {
     company: contact.company ?? '',
     title: contact.title ?? '',
     notes: contact.notes ?? '',
+    tier: contact.tier,
   };
 }
 
@@ -147,6 +153,7 @@ export function ContactForm() {
       company: fields.company.trim() || null,
       title: fields.title.trim() || null,
       notes: fields.notes.trim() || null,
+      tier: fields.tier,
     };
 
     setSaving(true);
@@ -284,6 +291,21 @@ export function ContactForm() {
             onChange={(e) => setField('linkedinUrl', e.target.value)}
           />
           {errors.linkedinUrl && <span className="field-error">{errors.linkedinUrl}</span>}
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="tier" className="form-label">Tier</label>
+          <select
+            id="tier"
+            className="form-input"
+            value={fields.tier ?? ''}
+            onChange={(e) => setField('tier', (e.target.value as ContactTier) || null)}
+          >
+            <option value="">(none)</option>
+            {TIER_VALUES.map((t) => (
+              <option key={t} value={t}>{TIER_LABELS[t]}</option>
+            ))}
+          </select>
         </div>
 
         <div className="form-group">

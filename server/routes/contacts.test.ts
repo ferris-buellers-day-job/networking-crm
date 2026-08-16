@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import express, { type Express } from 'express';
 import request from 'supertest';
 import { CacheDb } from '../lib/cache-db.js';
 import { createRecentWrites } from '../lib/recent-writes.js';
-import { FileStore } from '../lib/file-store.js';
+import { FileStore, FileStoreQuarantineError } from '../lib/file-store.js';
 import { StorageError } from '../lib/errors.js';
 import { createErrorHandler } from '../middleware/error-handler.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
@@ -40,8 +40,19 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     company: null,
     title: null,
     notes: null,
+    tier: null,
     ...overrides,
   };
+}
+
+// Extract the JSON payload from a debugBlock string so tests can assert on
+// Zod issue structure (path, code) without coupling to fragile message strings.
+function parseDebugBlock(debugBlock: string): {
+  context: { issues: Array<{ path: (string | number)[]; code: string }> };
+} {
+  const start = '--- DEBUG BLOCK ---\n'.length;
+  const end = debugBlock.lastIndexOf('\n--- END DEBUG BLOCK ---');
+  return JSON.parse(debugBlock.slice(start, end)) as ReturnType<typeof parseDebugBlock>;
 }
 
 function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
@@ -148,6 +159,17 @@ describe('contacts router', () => {
       expect(res.body.contacts[0].id).toBe(active.id);
     });
 
+    it('returns tier field on each contact in list', async () => {
+      await store.save(makeContact({ name: 'Alice', tier: 'inner_circle' }), { preserveTimestamps: true });
+      await store.save(makeContact({ name: 'Bob' }), { preserveTimestamps: true });
+
+      const res = await request(app).get('/api/contacts');
+      expect(res.status).toBe(200);
+      const byName = (name: string) => res.body.contacts.find((c: Contact) => c.name === name);
+      expect(byName('Alice').tier).toBe('inner_circle');
+      expect(byName('Bob').tier).toBeNull();
+    });
+
     it('sorts contacts by name ascending case-insensitive', async () => {
       await store.save(makeContact({ name: 'Charlie' }), { preserveTimestamps: true });
       await store.save(makeContact({ name: 'alice' }), { preserveTimestamps: true });
@@ -172,6 +194,15 @@ describe('contacts router', () => {
       expect(res.status).toBe(200);
       expect(res.body.contact.id).toBe(contact.id);
       expect(res.body.contact.name).toBe('Alice');
+    });
+
+    it('returns tier field on single contact', async () => {
+      const contact = makeContact({ name: 'Alice', tier: 'dormant' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app).get(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.contact.tier).toBe('dormant');
     });
 
     it('returns 404 for nonexistent id', async () => {
@@ -306,6 +337,38 @@ describe('contacts router', () => {
       expect(res.status).toBe(400);
       expect(res.body.error.debugBlock).toContain('"op": "contacts.create"');
     });
+
+    it('creates contact with tier: null when tier omitted from body', async () => {
+      const res = await request(app).post('/api/contacts').send({ name: 'Alice' });
+      expect(res.status).toBe(201);
+      expect(res.body.contact.tier).toBeNull();
+    });
+
+    it('creates contact with tier: inner_circle', async () => {
+      const res = await request(app).post('/api/contacts').send({ name: 'Alice', tier: 'inner_circle' });
+      expect(res.status).toBe(201);
+      expect(res.body.contact.tier).toBe('inner_circle');
+    });
+
+    it('creates contact with tier: active', async () => {
+      const res = await request(app).post('/api/contacts').send({ name: 'Alice', tier: 'active' });
+      expect(res.status).toBe(201);
+      expect(res.body.contact.tier).toBe('active');
+    });
+
+    it('creates contact with tier: dormant', async () => {
+      const res = await request(app).post('/api/contacts').send({ name: 'Alice', tier: 'dormant' });
+      expect(res.status).toBe(201);
+      expect(res.body.contact.tier).toBe('dormant');
+    });
+
+    it('returns 400 with tier-field enum error (not strict-mode) for out-of-enum tier value', async () => {
+      const res = await request(app).post('/api/contacts').send({ name: 'Alice', tier: 'platinum' });
+      expect(res.status).toBe(400);
+      const debug = parseDebugBlock(res.body.error.debugBlock);
+      expect(debug.context.issues[0].path).toEqual(['tier']);
+      expect(debug.context.issues[0].code).toBe('invalid_enum_value');
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -407,6 +470,57 @@ describe('contacts router', () => {
 
       expect(res.status).toBe(404);
       expect(res.body.error.type).toBe('NotFound');
+    });
+
+    it('sets tier when PUT body includes tier', async () => {
+      const contact = makeContact({ name: 'Alice' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app)
+        .put(`/api/contacts/${contact.id}`)
+        .send({ tier: 'active' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.contact.tier).toBe('active');
+    });
+
+    it('clears tier to null when PUT body sends tier: null', async () => {
+      const contact = makeContact({ name: 'Alice', tier: 'active' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app)
+        .put(`/api/contacts/${contact.id}`)
+        .send({ tier: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.contact.tier).toBeNull();
+    });
+
+    it('leaves existing non-null tier unchanged when tier is omitted from PUT body', async () => {
+      // Must start from a non-null tier so an accidental clear would be detectable.
+      const contact = makeContact({ name: 'Alice', tier: 'active' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app)
+        .put(`/api/contacts/${contact.id}`)
+        .send({ name: 'Alice Updated' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.contact.tier).toBe('active');
+    });
+
+    it('returns 400 with tier-field enum error (not strict-mode) for out-of-enum tier value', async () => {
+      const contact = makeContact({ name: 'Alice' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const res = await request(app)
+        .put(`/api/contacts/${contact.id}`)
+        .send({ tier: 'platinum' });
+
+      expect(res.status).toBe(400);
+      const debug = parseDebugBlock(res.body.error.debugBlock);
+      expect(debug.context.issues[0].path).toEqual(['tier']);
+      expect(debug.context.issues[0].code).toBe('invalid_enum_value');
     });
   });
 
@@ -594,6 +708,51 @@ describe('contacts router', () => {
       const res2 = await request(app).delete(`/api/contacts/${contact.id}`);
       expect(res2.status).toBe(404);
       expect(res2.body.error.type).toBe('NotFound');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Schema migration safety (ADR 016)
+  // ---------------------------------------------------------------------------
+  describe('no-quarantine load test (ADR 016)', () => {
+    it('a v1 contact file with NO tier key loads to tier: null without quarantine', async () => {
+      const id = crypto.randomUUID();
+      // Write raw JSON bypassing FileStore.save so the file genuinely has no tier key,
+      // exactly mirroring existing on-disk contact files written before this sprint.
+      const raw = JSON.stringify({
+        id,
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+        deletedAt: null,
+        schemaVersion: 1,
+        name: 'Legacy Contact',
+        preferredName: null,
+        linkedinUrl: null,
+        phone: null,
+        defaultCountry: null,
+        email: null,
+        company: null,
+        title: null,
+        notes: null,
+        // tier key deliberately absent
+      });
+      await writeFile(path.join(contactsDir, `${id}.json`), raw, 'utf-8');
+
+      // Read through FileStore — .default(null) in ContactSchema must coerce the absent
+      // tier to null. If instead the version-mismatch branch fires (which it won't, since
+      // schemaVersion=1 === expectedSchemaVersion=1), this would throw FileStoreQuarantineError.
+      let result: Contact | null = null;
+      let caughtError: unknown = null;
+      try {
+        result = await store.get(id);
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result?.tier).toBeNull();
+      expect(result?.name).toBe('Legacy Contact');
     });
   });
 });

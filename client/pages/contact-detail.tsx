@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { getContact, deleteContact, type Contact } from '../lib/contacts-api.js';
+import { getContact, deleteContact, TIER_LABELS, type Contact } from '../lib/contacts-api.js';
 import { formatPhoneForDisplay } from '../lib/phone.js';
 import { ApiError } from '../lib/api-error.js';
 import { ConfirmModal } from '../components/confirm-modal.js';
@@ -62,6 +62,12 @@ export function ContactDetail() {
   return (
     <div className="contact-detail-page">
       <h1>{displayName}</h1>
+
+      {contact.tier && (
+        <span className={`tier-badge tier-badge--${contact.tier}`}>
+          {TIER_LABELS[contact.tier]}
+        </span>
+      )}
 
       <dl className="contact-fields">
         {contact.preferredName && (

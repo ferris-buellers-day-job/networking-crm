@@ -1,6 +1,18 @@
 import { apiFetch } from './api.js';
 import { ApiError, NetworkError } from './api-error.js';
 
+export type ContactTier = 'inner_circle' | 'active' | 'dormant';
+
+// Key insertion order here determines the display order in the form select and
+// list filter — do not reorder without considering the UI impact.
+export const TIER_LABELS: Record<ContactTier, string> = {
+  inner_circle: 'Inner Circle',
+  active:       'Active',
+  dormant:      'Dormant',
+};
+
+export const TIER_VALUES = Object.keys(TIER_LABELS) as ContactTier[];
+
 export interface Contact {
   id: string;
   createdAt: string;
@@ -16,6 +28,7 @@ export interface Contact {
   company: string | null;
   title: string | null;
   notes: string | null;
+  tier: ContactTier | null;
 }
 
 export interface ContactListResponse {
@@ -44,6 +57,7 @@ export interface ContactInput {
   company?: string | null;
   title?: string | null;
   notes?: string | null;
+  tier?: ContactTier | null;
 }
 
 export function createContact(input: ContactInput): Promise<ContactResponse> {

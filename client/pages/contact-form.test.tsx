@@ -7,11 +7,15 @@ import { ContactForm } from './contact-form.js';
 import { ApiError } from '../lib/api-error.js';
 import type { Contact } from '../lib/contacts-api.js';
 
-vi.mock('../lib/contacts-api.js', () => ({
-  getContact: vi.fn(),
-  createContact: vi.fn(),
-  updateContact: vi.fn(),
-}));
+vi.mock('../lib/contacts-api.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/contacts-api.js')>();
+  return {
+    ...actual,
+    getContact: vi.fn(),
+    createContact: vi.fn(),
+    updateContact: vi.fn(),
+  };
+});
 
 // Render a simple dropdown so tests aren't coupled to the full country list
 vi.mock('../components/country-select.js', () => ({
@@ -24,7 +28,7 @@ vi.mock('../components/country-select.js', () => ({
   ),
 }));
 
-import { getContact, createContact, updateContact } from '../lib/contacts-api.js';
+import { getContact, createContact, updateContact, TIER_LABELS } from '../lib/contacts-api.js';
 
 const TEST_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
 
@@ -44,6 +48,7 @@ function makeContact(overrides: Partial<Contact> = {}): Contact {
     company: null,
     title: null,
     notes: null,
+    tier: null,
     ...overrides,
   };
 }
@@ -183,5 +188,73 @@ describe('ContactForm', () => {
     await screen.findByRole('heading', { name: 'Edit Contact' });
     const link = screen.getByRole('link', { name: /cancel/i });
     expect(link).toHaveAttribute('href', `/contacts/${TEST_ID}`);
+  });
+
+  describe('tier select', () => {
+    it('renders tier select with (none), Inner Circle, Active, Dormant options', () => {
+      renderCreate();
+      const select = screen.getByLabelText(/tier/i);
+      expect(select).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: '(none)' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: TIER_LABELS['inner_circle'] })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: TIER_LABELS['active'] })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: TIER_LABELS['dormant'] })).toBeInTheDocument();
+    });
+
+    it('in create mode, submitting with (none) selected sends tier: null', async () => {
+      vi.mocked(createContact).mockResolvedValue({ contact: makeContact() });
+      renderCreate();
+      fireEvent.change(screen.getByLabelText(/name \*/i), { target: { value: 'Alice' } });
+      // tier select defaults to (none) — no change needed
+      fireEvent.click(screen.getByRole('button', { name: /create contact/i }));
+      await waitFor(() => expect(createContact).toHaveBeenCalledWith(
+        expect.objectContaining({ tier: null })
+      ));
+    });
+
+    it('in create mode, selecting Inner Circle sends tier: inner_circle', async () => {
+      vi.mocked(createContact).mockResolvedValue({ contact: makeContact() });
+      renderCreate();
+      fireEvent.change(screen.getByLabelText(/name \*/i), { target: { value: 'Alice' } });
+      fireEvent.change(screen.getByLabelText(/tier/i), { target: { value: 'inner_circle' } });
+      fireEvent.click(screen.getByRole('button', { name: /create contact/i }));
+      await waitFor(() => expect(createContact).toHaveBeenCalledWith(
+        expect.objectContaining({ tier: 'inner_circle' })
+      ));
+    });
+
+    it('in edit mode, tier select is pre-populated from contact tier', async () => {
+      vi.mocked(getContact).mockResolvedValue({ contact: makeContact({ tier: 'active' }) });
+      renderEdit();
+      await screen.findByRole('heading', { name: 'Edit Contact' });
+      const select = screen.getByLabelText(/tier/i) as HTMLSelectElement;
+      expect(select.value).toBe('active');
+    });
+
+    it('in edit mode, changing tier and submitting sends updated tier', async () => {
+      vi.mocked(getContact).mockResolvedValue({ contact: makeContact({ tier: 'active' }) });
+      vi.mocked(updateContact).mockResolvedValue({ contact: makeContact({ tier: 'dormant' }) });
+      renderEdit();
+      await screen.findByRole('heading', { name: 'Edit Contact' });
+      fireEvent.change(screen.getByLabelText(/tier/i), { target: { value: 'dormant' } });
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+      await waitFor(() => expect(updateContact).toHaveBeenCalledWith(
+        TEST_ID,
+        expect.objectContaining({ tier: 'dormant' })
+      ));
+    });
+
+    it('in edit mode, selecting (none) sends tier: null to clear the tier', async () => {
+      vi.mocked(getContact).mockResolvedValue({ contact: makeContact({ tier: 'active' }) });
+      vi.mocked(updateContact).mockResolvedValue({ contact: makeContact({ tier: null }) });
+      renderEdit();
+      await screen.findByRole('heading', { name: 'Edit Contact' });
+      fireEvent.change(screen.getByLabelText(/tier/i), { target: { value: '' } });
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+      await waitFor(() => expect(updateContact).toHaveBeenCalledWith(
+        TEST_ID,
+        expect.objectContaining({ tier: null })
+      ));
+    });
   });
 });

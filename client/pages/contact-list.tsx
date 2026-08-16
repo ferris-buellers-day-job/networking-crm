@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchContacts, type Contact } from '../lib/contacts-api.js';
+import { fetchContacts, TIER_LABELS, TIER_VALUES, type Contact, type ContactTier } from '../lib/contacts-api.js';
 import '../styles/contacts.css';
 
 export function ContactList() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [tierFilter, setTierFilter] = useState<ContactTier | 'untiered' | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export function ContactList() {
     );
   }
 
-  const filtered =
+  const afterText =
     query.trim() === ''
       ? contacts
       : contacts.filter((c) => {
@@ -44,6 +45,11 @@ export function ContactList() {
             (c.email?.toLowerCase().includes(q) ?? false)
           );
         });
+
+  const filtered =
+    tierFilter === null    ? afterText :
+    tierFilter === 'untiered' ? afterText.filter((c) => c.tier === null) :
+    afterText.filter((c) => c.tier === tierFilter);
 
   return (
     <div className="contacts-page">
@@ -62,6 +68,22 @@ export function ContactList() {
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Search contacts"
       />
+
+      <select
+        className="tier-filter-select"
+        value={tierFilter ?? ''}
+        onChange={(e) => {
+          const v = e.target.value;
+          setTierFilter(v === '' ? null : v as ContactTier | 'untiered');
+        }}
+        aria-label="Filter by tier"
+      >
+        <option value="">All</option>
+        {TIER_VALUES.map((t) => (
+          <option key={t} value={t}>{TIER_LABELS[t]}</option>
+        ))}
+        <option value="untiered">Untiered</option>
+      </select>
 
       {contacts.length === 0 ? (
         <p className="contacts-empty">No contacts yet. Create your first contact.</p>
@@ -84,6 +106,11 @@ export function ContactList() {
                 <tr key={contact.id}>
                   <td>
                     <Link to={to}>{displayName}</Link>
+                    {contact.tier && (
+                      <span className={`tier-badge tier-badge--${contact.tier}`}>
+                        {TIER_LABELS[contact.tier]}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <Link to={to}>{contact.company ?? ''}</Link>
