@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented here.
 
+## [0.8.0] - 2026-08-16
+
+### Added
+
+- **Sprint 08 — Reminders**
+  - **Reminder schema** (`server/schemas/reminder.ts`)
+    - Zod schema with fields: contactId (uuid), dueAt (UTC ISO 8601 with Z suffix), status (pending|done), note (nullable, max 500 chars), plus standard base fields
+    - `REMINDER_SCHEMA_VERSION = 1` per ADR 012
+  - **Reminders API** (`server/routes/reminders.ts`)
+    - `POST /api/reminders` — create reminder with server-side validation of contactId (non-deleted only) and dueAt (enforces Z-suffix UTC via Zod); strict field validation; 400 for offset-bearing or bare local dueAt strings
+    - `GET /api/reminders` — list pending, non-deleted reminders sorted by dueAt ascending (soonest first)
+    - `PATCH /api/reminders/:id/done` — mark reminder complete; status:done orthogonal from deletedAt (done reminders preserve deletedAt:null for completion history)
+    - `DELETE /api/reminders/:id` — soft delete
+  - **Contact cascade soft-delete extension** (ADR 017)
+    - `DELETE /api/contacts/:id` now cascades to soft-delete pending (status:pending, deletedAt:null) reminders before contact deletion
+    - Done reminders (status:done) are excluded from cascade — they remain on disk untouched as completed history
+    - Write-order invariant: interactions → pending reminders → contact; partial failure leaves contact active and operation retryable
+  - **`docs/decisions/017-cascade-soft-delete-policy.md`**
+    - Generalizes ADR 013; documents cascade precedent across all child entity types (Interactions, Reminders) and per-child filtering (non-deleted and status-dependent)
+  - **Client reminders API module** (`client/lib/reminders-api.ts`)
+    - `fetchReminders`, `createReminder`, `markReminderDone`, `deleteReminder` via `apiFetch` (DELETE via raw fetch for 204 No Content pattern)
+    - `Reminder` interface matching server schema
+  - **ContactPicker component** (`client/components/contact-picker.tsx`)
+    - Extracted from ResolveInboxModal; standalone reusable component for contact search + selection
+    - Filters by name and preferredName (case-insensitive); keyboard-accessible (Enter to select, Tab-cycled by parent when inputRef forwarded)
+    - All existing resolve-inbox-modal tests pass unchanged; modal→page boundary test (`inbox.test.tsx`) verified after extraction
+  - **Reminders page** (`client/pages/reminders.tsx`, `/reminders` route)
+    - Parallel fetch of reminders + contacts on mount with unified loading state
+    - Empty state "No pending reminders."
+    - List display: contact name linked to contact detail, note (if non-null), dueAt formatted in local timezone
+    - **Overdue rendering:** `.reminder-overdue` class applied via epoch millisecond comparison (`new Date(dueAt) < new Date()`) — timezone-agnostic, catches 5pm-local vs 5pm-UTC bugs
+    - "Mark done" and "Delete" actions remove from list in place on success
+    - Inline create form with ContactPicker (sourced from pre-fetched contacts list), datetime-local input, optional note
+    - Client-side local→UTC conversion before POST (`new Date(inputValue).toISOString()`); dueAt is always UTC Z on the wire
+    - ApiError 400 shown inline (e.g., contact not found); other errors propagate to ErrorBoundary
+  - **ResolveInboxModal refactor** (`client/components/resolve-inbox-modal.tsx`)
+    - ContactPicker extracted, modal now uses component instead of inline search logic
+    - Props and behavior unchanged; all 15 modal tests + inbox boundary test continue to pass
+
+### Test count: 588 total (33 files); Sprint 08-specific: 26 server tests + 23 client tests across 8 files
+
 ## [0.7.0] - 2026-08-15
 
 ### Added

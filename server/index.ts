@@ -7,6 +7,7 @@ import { createClientErrorRouter } from './routes/client-error.js';
 import { createContactsRouter } from './routes/contacts.js';
 import { createInteractionsRouter } from './routes/interactions.js';
 import { createInboxRouter } from './routes/inbox.js';
+import { createRemindersRouter } from './routes/reminders.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 import { initStorage, FatalStorageError, type StorageContext } from './services/storage.js';
 
@@ -140,8 +141,9 @@ async function main(): Promise<void> {
   app.use('/api', clientErrorRouter);
 
   const contactsRouter = createContactsRouter({
-    contactsStore: storage.contactsStore,
+    contactsStore:     storage.contactsStore,
     interactionsStore: storage.interactionsStore,
+    remindersStore:    storage.reminderStore,
   });
   app.use('/api/contacts', contactsRouter);
 
@@ -159,6 +161,12 @@ async function main(): Promise<void> {
     dataPath: config.dataPath,
   });
   app.use('/api/inbox', inboxRouter);
+
+  const remindersRouter = createRemindersRouter({
+    remindersStore: storage.reminderStore,
+    contactsStore: storage.contactsStore,
+  });
+  app.use('/api/reminders', remindersRouter);
 
   if (isProduction) {
     // Production: serve static files from dist/client

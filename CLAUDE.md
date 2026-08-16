@@ -104,7 +104,7 @@ Rules established from Sprint 04 sessions — apply in all future sessions:
 4. **Plan summaries end with explicit handoff.** After producing a plan summary, end the message with the literal text "Awaiting reviewer approval" and stop. Do not "proceed with implementation" on your own. Wait for explicit approval before writing any code.
 
 ## Current sprint
-**Sprint 08 — Reminders (spec to be drafted).**
+**Sprint 09 — Action items (spec to be drafted).**
 
 ## Sprint sequence (for context; don't pre-read)
 1. Skeleton — project scaffolding, nothing persistent.

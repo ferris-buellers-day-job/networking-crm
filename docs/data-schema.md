@@ -68,3 +68,18 @@ All schemas are defined with Zod and validated on every read and write. See ADR 
 | `candidateContactIds` | UUID string[] | Yes | Populated when `matchState = 'ambiguous'`. Empty array otherwise. |
 | `contactId` | UUID string \| `null` | No | Set when `status = 'resolved'`. |
 | `interactionId` | UUID string \| `null` | No | Set when `status = 'resolved'` and an Interaction was created. |
+
+---
+
+## Reminder (`server/schemas/reminder.ts`)
+
+`REMINDER_SCHEMA_VERSION = 1`
+
+**status and deletedAt are orthogonal.** `status: 'done'` marks completion (`deletedAt` stays `null`). `deletedAt` is set only by soft-delete (direct or contact cascade). Done reminders are preserved as completed history and excluded from contact cascade (see ADR 017).
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `contactId` | UUID string | Yes | Reference to the Contact's `id`. Must be non-deleted at write time (ADR 006 §10). Cascades on contact soft-delete (ADR 017). |
+| `dueAt` | ISO 8601 UTC (`Z`) | Yes | When the reminder is due. Always UTC with Z suffix; local→UTC conversion happens client-side. Overdue = `dueAt < now()` at render time (epoch-ms comparison). |
+| `status` | `'pending'` \| `'done'` | Yes | `pending` = active. `done` = completed by user. Set to `'done'` via PATCH done; never set to `'done'` by cascade. |
+| `note` | string (≤500) \| `null` | No | Optional prompt, e.g. "Ask about Q4 partnership." |

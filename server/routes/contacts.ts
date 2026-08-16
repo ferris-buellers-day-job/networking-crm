@@ -5,10 +5,12 @@ import { normalizePhone } from '../lib/phone.js';
 import { FileStore, FileStoreQuarantineError } from '../lib/file-store.js';
 import { CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 import { type Interaction } from '../schemas/interaction.js';
+import { type Reminder } from '../schemas/reminder.js';
 
 export interface ContactsRouterDeps {
-  contactsStore: FileStore<Contact>;
+  contactsStore:     FileStore<Contact>;
   interactionsStore: FileStore<Interaction>;
+  remindersStore:    FileStore<Reminder>;
 }
 
 const NOT_FOUND_RESPONSE = {
@@ -57,7 +59,7 @@ function resolvePhone(
 }
 
 export function createContactsRouter(deps: ContactsRouterDeps): Router {
-  const { contactsStore, interactionsStore } = deps;
+  const { contactsStore, interactionsStore, remindersStore } = deps;
   const router = Router();
 
   // GET /api/contacts — non-deleted contacts, sorted by name ascending case-insensitive
@@ -218,9 +220,8 @@ export function createContactsRouter(deps: ContactsRouterDeps): Router {
 
       const now = new Date().toISOString();
 
-      // Cascade: soft-delete all active interactions for this contact first.
-      // Interactions are written before the contact so that if a write fails,
-      // the contact remains active and the cascade can be retried.
+      // Cascade per ADR 017: children before contact, so partial failure leaves contact active.
+      // Step 1: soft-delete active interactions.
       const allInteractions = await interactionsStore.getAll();
       const activeInteractions = allInteractions.filter(
         (i) => i.contactId === existing!.id && i.deletedAt === null
@@ -232,6 +233,20 @@ export function createContactsRouter(deps: ContactsRouterDeps): Router {
         );
       }
 
+      // Step 2: soft-delete pending reminders.
+      // Done reminders (status:'done', deletedAt:null) are excluded — they are completed history.
+      const allReminders = await remindersStore.getAll();
+      const pendingReminders = allReminders.filter(
+        (r) => r.contactId === existing!.id && r.status === 'pending' && r.deletedAt === null
+      );
+      for (const reminder of pendingReminders) {
+        await remindersStore.save(
+          { ...reminder, deletedAt: now, updatedAt: now },
+          { preserveTimestamps: true }
+        );
+      }
+
+      // Step 3: soft-delete the contact.
       await contactsStore.save({ ...existing, deletedAt: now, updatedAt: now }, { preserveTimestamps: true });
       res.status(204).send();
     } catch (err) {

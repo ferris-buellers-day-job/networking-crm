@@ -11,6 +11,7 @@ import { StorageError } from '../lib/errors.js';
 import { createErrorHandler } from '../middleware/error-handler.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
+import { ReminderSchema, REMINDER_SCHEMA_VERSION, type Reminder } from '../schemas/reminder.js';
 import { createContactsRouter } from './contacts.js';
 import { createInteractionsRouter } from './interactions.js';
 import type { Logger } from '../lib/logger.js';
@@ -71,21 +72,40 @@ function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
   };
 }
 
+function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: '2026-06-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    deletedAt: null,
+    schemaVersion: REMINDER_SCHEMA_VERSION,
+    contactId: crypto.randomUUID(),
+    dueAt: '2026-09-01T12:00:00.000Z',
+    status: 'pending',
+    note: null,
+    ...overrides,
+  };
+}
+
 describe('contacts router', () => {
   let tempDir: string;
   let contactsDir: string;
   let interactionsDir: string;
+  let remindersDir: string;
   let cacheDb: CacheDb;
   let store: FileStore<Contact>;
   let interactionStore: FileStore<Interaction>;
+  let reminderStore: FileStore<Reminder>;
   let app: Express;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'crm-contacts-test-'));
     contactsDir = path.join(tempDir, 'contacts');
     interactionsDir = path.join(tempDir, 'interactions');
+    remindersDir = path.join(tempDir, 'reminders');
     await mkdir(contactsDir, { recursive: true });
     await mkdir(interactionsDir, { recursive: true });
+    await mkdir(remindersDir, { recursive: true });
     await mkdir(path.join(tempDir, '.quarantine'), { recursive: true });
 
     const dbPath = path.join(tempDir, 'cache.db');
@@ -109,11 +129,18 @@ describe('contacts router', () => {
       { expectedSchemaVersion: INTERACTION_SCHEMA_VERSION }
     );
 
+    reminderStore = new FileStore<Reminder>(
+      remindersDir,
+      ReminderSchema,
+      { cacheDb, logger, recentWrites },
+      { expectedSchemaVersion: REMINDER_SCHEMA_VERSION }
+    );
+
     app = express();
     app.use(express.json());
     app.use(
       '/api/contacts',
-      createContactsRouter({ contactsStore: store, interactionsStore: interactionStore })
+      createContactsRouter({ contactsStore: store, interactionsStore: interactionStore, remindersStore: reminderStore })
     );
     app.use(
       '/api/interactions',
@@ -708,6 +735,113 @@ describe('contacts router', () => {
       const res2 = await request(app).delete(`/api/contacts/${contact.id}`);
       expect(res2.status).toBe(404);
       expect(res2.body.error.type).toBe('NotFound');
+    });
+
+    it('cascade: pending reminders are soft-deleted when contact is deleted', async () => {
+      const contact = makeContact({ name: 'Reminder Target' });
+      await store.save(contact, { preserveTimestamps: true });
+      const r1 = makeReminder({ contactId: contact.id });
+      const r2 = makeReminder({ contactId: contact.id });
+      await reminderStore.save(r1, { preserveTimestamps: true });
+      await reminderStore.save(r2, { preserveTimestamps: true });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(204);
+
+      const saved1 = await reminderStore.get(r1.id, { forceReload: true });
+      const saved2 = await reminderStore.get(r2.id, { forceReload: true });
+      expect(saved1?.deletedAt).not.toBeNull();
+      expect(saved2?.deletedAt).not.toBeNull();
+    });
+
+    it('cascade: done reminders are NOT cascade-deleted — they are preserved as history', async () => {
+      const contact = makeContact({ name: 'History Contact' });
+      await store.save(contact, { preserveTimestamps: true });
+      const doneReminder = makeReminder({ contactId: contact.id, status: 'done' });
+      await reminderStore.save(doneReminder, { preserveTimestamps: true });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(204);
+
+      const saved = await reminderStore.get(doneReminder.id, { forceReload: true });
+      expect(saved?.deletedAt).toBeNull();
+      expect(saved?.status).toBe('done');
+    });
+
+    it('cascade orthogonality: done reminder has {status:done, deletedAt:null}; pending reminder has {status:pending, deletedAt:set} after contact delete', async () => {
+      const contact = makeContact({ name: 'Orthogonal Contact' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const doneReminder    = makeReminder({ contactId: contact.id, status: 'done' });
+      const pendingReminder = makeReminder({ contactId: contact.id, status: 'pending' });
+      await reminderStore.save(doneReminder,    { preserveTimestamps: true });
+      await reminderStore.save(pendingReminder, { preserveTimestamps: true });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(204);
+
+      const savedDone    = await reminderStore.get(doneReminder.id,    { forceReload: true });
+      const savedPending = await reminderStore.get(pendingReminder.id, { forceReload: true });
+
+      // All four fields asserted — the two records must be distinguishable on disk
+      expect(savedDone?.status).toBe('done');
+      expect(savedDone?.deletedAt).toBeNull();
+      expect(savedPending?.status).toBe('pending');
+      expect(savedPending?.deletedAt).not.toBeNull();
+    });
+
+    // Write-order invariant tests (ADR 017): test all three cascade positions.
+    // If any step fails, the contact must stay active and downstream steps must not run.
+
+    it('write-order: if interaction cascade fails, no reminder is cascade-deleted AND contact stays active', async () => {
+      const contact = makeContact({ name: 'Write Order A' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const interaction = makeInteraction({ contactId: contact.id });
+      const reminder    = makeReminder({ contactId: contact.id });
+      await interactionStore.save(interaction, { preserveTimestamps: true });
+      await reminderStore.save(reminder, { preserveTimestamps: true });
+
+      // Fail on the interaction cascade save
+      const originalSave = interactionStore.save.bind(interactionStore);
+      vi.spyOn(interactionStore, 'save').mockImplementation(async () => {
+        throw new StorageError('Simulated disk failure on interaction', { op: 'test' });
+      });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(500);
+
+      vi.restoreAllMocks();
+
+      // Contact must still be active
+      const contactRecord = await store.get(contact.id, { forceReload: true });
+      expect(contactRecord?.deletedAt).toBeNull();
+
+      // Reminder must NOT have been soft-deleted (interactions run before reminders)
+      const reminderRecord = await reminderStore.get(reminder.id, { forceReload: true });
+      expect(reminderRecord?.deletedAt).toBeNull();
+    });
+
+    it('write-order: if reminder cascade fails, contact stays active (reminders-before-contact)', async () => {
+      const contact = makeContact({ name: 'Write Order B' });
+      await store.save(contact, { preserveTimestamps: true });
+
+      const reminder = makeReminder({ contactId: contact.id });
+      await reminderStore.save(reminder, { preserveTimestamps: true });
+
+      // Fail on the reminder cascade save
+      vi.spyOn(reminderStore, 'save').mockImplementation(async () => {
+        throw new StorageError('Simulated disk failure on reminder', { op: 'test' });
+      });
+
+      const res = await request(app).delete(`/api/contacts/${contact.id}`);
+      expect(res.status).toBe(500);
+
+      vi.restoreAllMocks();
+
+      // Contact must still be active — reminder cascade ran before the contact write
+      const contactRecord = await store.get(contact.id, { forceReload: true });
+      expect(contactRecord?.deletedAt).toBeNull();
     });
   });
 

@@ -10,6 +10,7 @@ import { FileStore } from '../lib/file-store.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
 import { InboxEntrySchema, INBOX_ENTRY_SCHEMA_VERSION, type InboxEntry } from '../schemas/inbox-entry.js';
+import { ReminderSchema, REMINDER_SCHEMA_VERSION, type Reminder } from '../schemas/reminder.js';
 
 /**
  * Error thrown when storage initialization fails fatally.
@@ -43,6 +44,7 @@ export interface StorageContext {
   contactsStore: FileStore<Contact>;
   interactionsStore: FileStore<Interaction>;
   inboxEntryStore: FileStore<InboxEntry>;
+  reminderStore: FileStore<Reminder>;
 
   /** Start file watcher and backup scheduler */
   start(): void;
@@ -58,7 +60,7 @@ const UUID_PATTERN = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const EXPECTED_SCHEMA_VERSION = 1;
 
 // Entity directories to check for cache staleness
-const ENTITY_DIRECTORIES: string[] = ['contacts', 'interactions', 'inbox_queue'];
+const ENTITY_DIRECTORIES: string[] = ['contacts', 'interactions', 'inbox_queue', 'reminders'];
 
 /**
  * Initialize the storage layer.
@@ -202,6 +204,13 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     { expectedSchemaVersion: INBOX_ENTRY_SCHEMA_VERSION }
   );
 
+  const reminderStore = new FileStore<Reminder>(
+    path.join(config.dataPath, 'reminders'),
+    ReminderSchema,
+    { cacheDb, logger, recentWrites },
+    { expectedSchemaVersion: REMINDER_SCHEMA_VERSION }
+  );
+
   logger.info('storage.init', 'Storage layer initialized successfully');
 
   // Build context with start/stop methods
@@ -219,6 +228,7 @@ export async function initStorage(config: StorageConfig): Promise<StorageContext
     contactsStore,
     interactionsStore,
     inboxEntryStore,
+    reminderStore,
 
     start(): void {
       if (isStarted) return;
@@ -266,6 +276,7 @@ async function initDataDirectory(dataPath: string): Promise<void> {
     path.join(dataPath, 'contacts'),
     path.join(dataPath, 'interactions'),
     path.join(dataPath, 'inbox_queue'),
+    path.join(dataPath, 'reminders'),
     path.join(dataPath, 'logs'),
     path.join(dataPath, '.quarantine'),
   ];

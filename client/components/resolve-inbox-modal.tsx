@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { resolveInboxEntry, type InboxEntry } from '../lib/inbox-api.js';
 import { fetchContacts, type Contact } from '../lib/contacts-api.js';
 import { ApiError } from '../lib/api-error.js';
+import { ContactPicker } from './contact-picker.js';
 import '../styles/contacts.css';
 
 export interface ResolveInboxModalProps {
@@ -22,16 +23,14 @@ export function ResolveInboxModal({
   const submitRef  = useRef<HTMLButtonElement>(null);
   const openerRef  = useRef<Element | null>(null);
 
-  const [contacts, setContacts]             = useState<Contact[]>([]);
-  const [searchQuery, setSearchQuery]       = useState('');
+  const [contacts, setContacts]               = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [inlineError, setInlineError]       = useState<string | null>(null);
-  const [submitError, setSubmitError]       = useState<Error | null>(null);
+  const [inlineError, setInlineError]         = useState<string | null>(null);
+  const [submitError, setSubmitError]         = useState<Error | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       openerRef.current = document.activeElement;
-      setSearchQuery('');
       setSelectedContact(null);
       setInlineError(null);
       cancelRef.current?.focus();
@@ -51,15 +50,6 @@ export function ResolveInboxModal({
 
   if (submitError) throw submitError;
   if (!isOpen) return null;
-
-  const normalized = searchQuery.toLowerCase().trim();
-  const filtered = normalized
-    ? contacts.filter(
-        (c) =>
-          c.name.toLowerCase().includes(normalized) ||
-          (c.preferredName !== null && c.preferredName.toLowerCase().includes(normalized))
-      )
-    : [];
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -111,54 +101,13 @@ export function ResolveInboxModal({
 
         <form onSubmit={(e) => { void handleSubmit(e); }}>
           <div className="modal-field">
-            <label htmlFor="resolve-search">Search contacts</label>
-            <input
-              ref={searchRef}
-              id="resolve-search"
-              type="text"
-              value={searchQuery}
-              placeholder="Type a name…"
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                // Typing again after a selection clears it
-                if (selectedContact) setSelectedContact(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (!selectedContact && filtered.length > 0) {
-                    setSelectedContact(filtered[0]);
-                  }
-                }
-              }}
+            <ContactPicker
+              contacts={contacts}
+              selectedContact={selectedContact}
+              onSelect={setSelectedContact}
+              inputRef={searchRef}
             />
           </div>
-
-          {selectedContact && (
-            <p className="resolve-selected">
-              Selected:{' '}
-              <strong>{selectedContact.preferredName ?? selectedContact.name}</strong>
-            </p>
-          )}
-
-          {!selectedContact && normalized && (
-            <ul className="resolve-results">
-              {filtered.length > 0 ? (
-                filtered.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedContact(c)}
-                    >
-                      {c.preferredName ? `${c.preferredName} (${c.name})` : c.name}
-                    </button>
-                  </li>
-                ))
-              ) : (
-                <li>No contacts match.</li>
-              )}
-            </ul>
-          )}
 
           <div className="modal-actions">
             <button ref={cancelRef} type="button" className="btn-secondary" onClick={onClose}>

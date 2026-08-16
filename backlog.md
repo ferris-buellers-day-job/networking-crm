@@ -84,6 +84,15 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [x] Ambiguous inbox card: display actual candidate contact names — *(Done Sprint 06 session 2)*
 - [ ] Test coverage: inbox card `parsedDate` locale formatting and `parsedSummary` 80-char truncation are rendered but unasserted (acceptance criterion line 77 remains open)
 
+## Sprint 08 Additions
+
+- [ ] Interaction-anchored reminders (complement contact-anchored reminders; optional field on Interaction)
+- [ ] Dismissed/snoozed reminder states (extend status enum; deferred activation)
+- [ ] Un-done (revert reminder from done status back to pending)
+- [ ] Contact detail reminder widget (show upcoming reminders on /contacts/:id page)
+- [ ] Reminder navigation badge (show count of overdue reminders in nav)
+- [ ] Reminder creation metadata (track whether reminder was created manually or from interaction)
+
 ## Ideas (Not Yet Scoped)
 
 - Relationship strength scoring based on interaction frequency
