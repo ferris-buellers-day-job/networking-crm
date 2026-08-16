@@ -104,7 +104,7 @@ Rules established from Sprint 04 sessions — apply in all future sessions:
 4. **Plan summaries end with explicit handoff.** After producing a plan summary, end the message with the literal text "Awaiting reviewer approval" and stop. Do not "proceed with implementation" on your own. Wait for explicit approval before writing any code.
 
 ## Current sprint
-**Sprint 07 — Tiers, reminders, action items (spec to be drafted).**
+**Sprint 08 — Reminders (spec to be drafted).**
 
 ## Sprint sequence (for context; don't pre-read)
 1. Skeleton — project scaffolding, nothing persistent.
@@ -112,9 +112,12 @@ Rules established from Sprint 04 sessions — apply in all future sessions:
 3. Error handling — fail-loud framework, debug-formatted errors, System Status view.
 4. Contacts — first real entity, i18n phone handling.
 5. Interactions + inbox processing.
-6. Tiers, reminders, action items.
-7. Claude API integration.
-8. ICS + email reminder batching.
-9. Obsidian markdown projection.
-10. LinkedIn CSV import.
-11. Polish — keyboard shortcuts, search, styling.
+6. Tiers — DONE (Sprint 07).
+7. Reminders.
+8. Action items.
+9. Schema migration infrastructure (v1→v2 upgrade-on-read) — unblocks all future schemaVersion bumps; see ADR 016 and backlog.
+10. Claude API integration.
+11. ICS + email reminder batching.
+12. Obsidian markdown projection.
+13. LinkedIn CSV import.
+14. Polish — keyboard shortcuts, search, styling.

@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## [0.7.0] - 2026-08-15
+
+### Added
+
+- **Sprint 07 — Contact Tiers**
+  - **ADR 016** (`docs/decisions/016-additive-nullable-fields.md`)
+    - Records the project-wide precedent for adding nullable fields without bumping `schemaVersion`: use `.nullable().default(null)` at the current version. `FileStore` quarantines on any version mismatch and has no migration infrastructure yet; version bumps are blocked until that is built.
+  - **`tier` field on ContactSchema** (`server/schemas/contact.ts`)
+    - `z.enum(['inner_circle', 'active', 'dormant']).nullable().default(null)`. `CONTACT_SCHEMA_VERSION` stays at 1. Existing contact files with no `tier` key load to `tier: null` via Zod's `.default(null)` coercion — verified by a dedicated no-quarantine load test that writes raw JSON bypassing `FileStore.save`.
+  - **Server routes** (`server/routes/contacts.ts`)
+    - `POST /api/contacts` and `PUT /api/contacts/:id` accept `tier` via `UserSettableFields`; Zod enum validation returns 400 on out-of-enum values with `path: ['tier']` and `code: 'invalid_enum_value'` (distinct from strict-mode unknown-field errors). PUT omit-vs-clear distinguished by `'tier' in input` guard (verified empirically: Zod `.partial()` omits the key entirely for absent fields). `GET` routes return `tier` automatically.
+  - **TIER_LABELS single-source constant** (`client/lib/contacts-api.ts`)
+    - `TIER_LABELS: Record<ContactTier, string>` and `TIER_VALUES` exported from one place; form select, list filter, and badges all derive labels from this map. Key insertion order controls UI display order.
+  - **Contact form tier select** (`client/pages/contact-form.tsx`)
+    - `<select>` with *(none)* / Inner Circle / Active / Dormant options; pre-populated from existing tier in edit mode; submits `tier: null` when *(none)* is selected.
+  - **Contact list tier badge + filter** (`client/pages/contact-list.tsx`)
+    - Tier badge on each row using `.tier-badge--{tier}` CSS classes. Client-side filter dropdown with All / Inner Circle / Active / Dormant / Untiered states, composing after the existing text search as a genuine intersection.
+  - **Contact detail tier badge** (`client/pages/contact-detail.tsx`)
+    - Badge rendered when `contact.tier` is non-null; absent for untiered contacts.
+  - **`docs/data-schema.md` rewrite** — populated with authoritative schema tables for Contact, Interaction, and InboxEntry entities (was a placeholder since Sprint 01).
+
+### Test count: 534 total (30 files)
+
 ## [0.6.0] - 2026-07-12
 
 ### Added

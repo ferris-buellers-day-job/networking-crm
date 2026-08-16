@@ -37,6 +37,7 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 
 - [ ] Client/server fallback country alignment: server reads DEFAULT_COUNTRY env var; client hardcodes 'US'. Consider exposing server's default country via API so they stay in sync.
 - [ ] Email validation strictness: server uses Zod `z.string().email()`; client does no pre-validation. Consider inline email format check on submit.
+- [ ] Build schema migration infrastructure (v1→v2 upgrade-on-read) — `FileStore.readAndValidate` quarantines on version mismatch with "Schema migration not yet implemented"; no schema version can be bumped until this exists (see ADR 016)
 - [ ] Schema migration tooling (for future schemaVersion bumps)
 - [ ] Conflict detection for iCloud sync races
 - [ ] Backup verification (periodic integrity check of git backup)
@@ -50,6 +51,7 @@ Unsorted ideas and future work. Items here are not committed to any sprint.
 - [ ] Responsive layout for various screen sizes
 - [ ] Loading states and skeleton screens
 - [ ] Accessibility audit (WCAG compliance)
+- [ ] Contact list tier badge a11y gap: badge and tier-filter dropdown option render identical label text (e.g. "Inner Circle") with no distinguishing affordance — a screen-reader user can't tell a row badge from a filter option. Add an `aria-label` or visually-hidden "Tier:" prefix to the badge element.
 
 ## Sprint 05 Additions
 
