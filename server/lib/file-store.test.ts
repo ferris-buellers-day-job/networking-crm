@@ -251,7 +251,7 @@ describe('FileStore', () => {
       const error = await storeV2.get(record.id).catch((e) => e);
 
       expect(error).toBeInstanceOf(FileStoreQuarantineError);
-      expect(error.reason).toBe('Schema migration not yet implemented (found v1, expected v2)');
+      expect(error.reason).toBe('no migration function registered for v1→v2');
 
       // Verify file was quarantined
       const quarantineDir = path.join(tempDir, '.quarantine');

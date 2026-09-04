@@ -3,9 +3,19 @@ import path from 'node:path';
 import type { ZodType, ZodError } from 'zod';
 import { atomicWriteJson } from './atomic-writer.js';
 import type { CacheDb } from './cache-db.js';
+import { StorageError } from './errors.js';
 import type { Logger } from './logger.js';
 import type { RecentWrites } from './recent-writes.js';
 import type { BaseRecord } from './schemas/base-record.js';
+
+/**
+ * Migration function type. Transforms a record from one schema version to the next.
+ * Receives and returns Record<string, unknown> — not the typed entity — because
+ * old-version records don't conform to the current Zod schema.
+ * Must be synchronous. Must NOT set schemaVersion; FileStore auto-bumps it.
+ * Must NOT modify createdAt or updatedAt; FileStore force-restores them after the chain.
+ */
+export type MigrationFn = (record: Record<string, unknown>) => Record<string, unknown>;
 
 /**
  * Error thrown when validation fails before writing to disk.
@@ -45,8 +55,14 @@ export interface FileStoreDeps {
 export interface FileStoreOptions<T> {
   /** Custom filename pattern. Default: `<id>.json` */
   filenamePattern?: (record: T) => string;
-  /** Expected schema version. Files with higher versions are quarantined. */
+  /** Expected schema version. Files with higher versions are quarantined; lower versions are migrated. */
   expectedSchemaVersion: number;
+  /**
+   * Migration functions keyed by fromVersion (e.g. { 1: v1ToV2, 2: v2ToV3 }).
+   * Absence or empty map means no migrations are registered.
+   * Functions are synchronous; FileStore auto-bumps schemaVersion after each step.
+   */
+  migrations?: Record<number, MigrationFn>;
 }
 
 export interface GetOptions {
@@ -84,6 +100,7 @@ export class FileStore<T extends BaseRecord> {
   private readonly expectedSchemaVersion: number;
   private readonly filenamePattern: (record: T) => string;
   private readonly quarantineDir: string;
+  private readonly migrations: Record<number, MigrationFn>;
 
   constructor(
     folder: string,
@@ -98,6 +115,7 @@ export class FileStore<T extends BaseRecord> {
     this.recentWrites = deps.recentWrites;
     this.expectedSchemaVersion = options.expectedSchemaVersion;
     this.filenamePattern = options.filenamePattern ?? ((record: T) => `${record.id}.json`);
+    this.migrations = options.migrations ?? {};
 
     // Derive table name from folder basename
     this.tableName = path.basename(folder);
@@ -296,13 +314,98 @@ export class FileStore<T extends BaseRecord> {
       }
 
       if (schemaVersion < this.expectedSchemaVersion) {
-        const reason = `Schema migration not yet implemented (found v${schemaVersion}, expected v${this.expectedSchemaVersion})`;
-        await this.quarantine(filePath, reason);
-        throw new FileStoreQuarantineError(
-          filePath,
-          await this.getQuarantinePath(filePath),
-          reason
-        );
+        // MIGRATION PATH — see ADR 018
+        const onDiskVersion = schemaVersion;
+
+        // Capture original timestamps before the chain loop mutates `current`.
+        // Force-restored after the loop, before Zod validation — so restoration
+        // is what's validated and written (validate-what-you-write invariant).
+        const originalCreatedAt = (parsed as Record<string, unknown>).createdAt;
+        const originalUpdatedAt = (parsed as Record<string, unknown>).updatedAt;
+
+        let current: Record<string, unknown> = parsed as Record<string, unknown>;
+
+        for (let v = onDiskVersion; v < this.expectedSchemaVersion; v++) {
+          const migrateFn = this.migrations[v];
+
+          if (!migrateFn) {
+            const reason = `no migration function registered for v${v}→v${v + 1}`;
+            await this.quarantine(filePath, reason);
+            throw new FileStoreQuarantineError(
+              filePath,
+              await this.getQuarantinePath(filePath),
+              reason
+            );
+          }
+
+          try {
+            current = migrateFn(current);
+          } catch (err) {
+            const reason = `Migration v${v}→v${v + 1} threw: ${(err as Error).message}`;
+            await this.quarantine(filePath, reason);
+            throw new FileStoreQuarantineError(
+              filePath,
+              await this.getQuarantinePath(filePath),
+              reason
+            );
+          }
+
+          // Auto-bump after migration fn output — overwrites any schemaVersion the fn returned
+          current = { ...current, schemaVersion: v + 1 };
+        }
+
+        // Restore original timestamps — before Zod validation so restored values
+        // are what gets validated and subsequently written to disk.
+        current = {
+          ...current,
+          createdAt: originalCreatedAt,
+          updatedAt: originalUpdatedAt,
+        };
+
+        // Validate migrated record against the current Zod schema
+        const migratedParseResult = this.schema.safeParse(current);
+        if (!migratedParseResult.success) {
+          const reason = `migration v${onDiskVersion}→v${this.expectedSchemaVersion} produced a record that fails current-schema validation: ${migratedParseResult.error.message}`;
+          await this.quarantine(filePath, reason);
+          throw new FileStoreQuarantineError(
+            filePath,
+            await this.getQuarantinePath(filePath),
+            reason
+          );
+        }
+
+        const migratedRecord = migratedParseResult.data;
+
+        // Eager write-back — atomicWriteJson directly to original filePath, not via save().
+        // save() would re-derive the filename (directory scan + filenamePattern) and
+        // double-validate. Passing this.recentWrites registers the write with chokidar
+        // so the file watcher does not treat it as an external edit.
+        try {
+          await atomicWriteJson(filePath, migratedRecord, this.recentWrites);
+        } catch (err) {
+          // Bad disk, not bad data — do NOT quarantine. The original file is still intact
+          // at filePath (atomic write either renamed fully or cleaned up its .tmp).
+          // The caller can retry get() to re-run the migration chain.
+          // Note: StorageError.recoverable is false (class-level constant) but this failure
+          // is operationally retryable — .recoverable is currently dormant in this codebase.
+          throw new StorageError(
+            `Migration write-back failed: ${(err as Error).message}`,
+            { op: 'fileStore.migrate', context: { filePath }, cause: err instanceof Error ? err : undefined }
+          );
+        }
+
+        // Cache updated only after successful write-back; if write-back threw above,
+        // cache remains empty for this id (migration ran on a cache miss).
+        this.cacheDb.upsert(this.tableName, migratedRecord as T & Record<string, unknown>);
+
+        this.logger.info('fileStore.migrate', 'Migrated record', {
+          id: (migratedRecord as Record<string, unknown>).id,
+          table: this.tableName,
+          fromVersion: onDiskVersion,
+          toVersion: this.expectedSchemaVersion,
+        });
+
+        return migratedRecord;
       }
     }
 
