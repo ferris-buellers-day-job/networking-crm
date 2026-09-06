@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## [0.9.0] - 2026-09-06
+
+### Added
+
+- **Sprint 09 — Schema migration infrastructure**
+  - **FileStore migration contract** (`server/lib/file-store.ts`)
+    - `MigrationFn` type exported: `(record: Record<string, unknown>) => Record<string, unknown>`
+    - `FileStoreOptions.migrations?: Record<number, MigrationFn>` for upgrade-on-read chain (ADR 018)
+    - Upgrade-on-read in `readAndValidate`: applies registered migration chain on `schemaVersion < expectedSchemaVersion`; no rollback for `schemaVersion > expectedSchemaVersion`
+    - FileStore auto-bumps `schemaVersion` after each migration step (overwrites any value fn returns)
+    - Four failure classifications: (1) migration threw → quarantine; (2) no fn registered → quarantine; (3) post-migration Zod validation failed → quarantine; (4) write-back disk error → StorageError, no quarantine
+    - Timestamp preservation: `createdAt` and `updatedAt` captured before chain, force-restored after chain and before Zod validation (validate-what-you-write invariant; catches buggy migrations that corrupt base fields)
+    - Eager atomic write-back via `atomicWriteJson` directly to original file path after successful migration and validation; `this.recentWrites` passed for chokidar self-write suppression
+    - Cache consistency: migration only runs on cache miss; write-back throws before cache update, leaving cache empty on Failure 4 (retryable); subsequent get() will re-run migration from intact file
+    - One test assertion updated in file-store.test.ts: "Schema migration not yet implemented" → "no migration function registered for vN→vN+1"
+  - **`docs/decisions/018-migration-contract.md`** — comprehensive ADR covering migration registration, chain application and auto-version-bump, timestamp restoration ordering (before validation), eager write-back mechanics, four failure classifications with distinct reason-string formats, no-rollback policy, testing contract (synthetic schemas; raw JSON writes); references ADR 006 §3, 007, 012, 016
+  - **Comprehensive migration test suite** (`server/lib/file-store-migration.test.ts`)
+    - 16 dedicated tests: single-step migration, auto-bump, two-step chain (with call-count assertion to prove atomic write), cold re-read idempotency (fresh-cache store), version-match skip (no write-back), timestamp happy-path (preserve createdAt/updatedAt), ordering-sensitive timestamp test (prove restoration-before-validation with 'not-a-date' probe), four failure classifications (migration threw, no migration registered incl. chain-gap subcase, post-migration validation failed with distinct reason, write-back disk error with retryability), version-too-high no regression, getAll() batch migration with eager write-back, mid-chain atomicity (disk+cache state consistency)
+    - Synthetic V1/V2/V3 schemas defined in-file; no production entity schema modified; suite 588 → 604 tests
+  - **No production schema version bumped** — CONTACT/INTERACTION/INBOX_ENTRY/REMINDER_SCHEMA_VERSION all remain 1; no migrations registered on any production FileStore instance in storage.ts
+
 ## [0.8.0] - 2026-08-16
 
 ### Added

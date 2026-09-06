@@ -104,7 +104,7 @@ Rules established from Sprint 04 sessions — apply in all future sessions:
 4. **Plan summaries end with explicit handoff.** After producing a plan summary, end the message with the literal text "Awaiting reviewer approval" and stop. Do not "proceed with implementation" on your own. Wait for explicit approval before writing any code.
 
 ## Current sprint
-**Sprint 09 — Action items (spec to be drafted).**
+**Sprint 10 — Claude API integration (spec to be drafted).**
 
 ## Sprint sequence (for context; don't pre-read)
 1. Skeleton — project scaffolding, nothing persistent.
@@ -113,9 +113,9 @@ Rules established from Sprint 04 sessions — apply in all future sessions:
 4. Contacts — first real entity, i18n phone handling.
 5. Interactions + inbox processing.
 6. Tiers — DONE (Sprint 07).
-7. Reminders.
-8. Action items.
-9. Schema migration infrastructure (v1→v2 upgrade-on-read) — unblocks all future schemaVersion bumps; see ADR 016 and backlog.
+7. Reminders — DONE (Sprint 08).
+8. Action items — descoped; reframed as optional `dueAt` field on Reminder (see backlog). Unblocked by item 9.
+9. Schema migration infrastructure (v1→v2 upgrade-on-read) — unblocks all future schemaVersion bumps; see ADR 018, ADR 016. DONE (Sprint 09).
 10. Claude API integration.
 11. ICS + email reminder batching.
 12. Obsidian markdown projection.
