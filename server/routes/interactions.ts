@@ -4,10 +4,13 @@ import { ValidationError } from '../lib/errors.js';
 import { FileStore, FileStoreQuarantineError } from '../lib/file-store.js';
 import { INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
 import { type Contact } from '../schemas/contact.js';
+import { SummarizeService, SummarizeError, SummarizeConfigError } from '../lib/summarize-service.js';
+import type { AnthropicClient } from '../lib/ai-client.js';
 
 export interface InteractionsRouterDeps {
   interactionsStore: FileStore<Interaction>;
-  contactsStore: FileStore<Contact>;
+  contactsStore:     FileStore<Contact>;
+  anthropicClient:   AnthropicClient;
 }
 
 const NOT_FOUND_RESPONSE = {
@@ -23,7 +26,8 @@ const InteractionCreateSchema = z.object({
 }).strict();
 
 export function createInteractionsRouter(deps: InteractionsRouterDeps): Router {
-  const { interactionsStore, contactsStore } = deps;
+  const { interactionsStore, contactsStore, anthropicClient } = deps;
+  const summarizeService = new SummarizeService(anthropicClient, interactionsStore);
   const router = Router();
 
   // GET /api/interactions?contactId=:id — list non-deleted interactions, newest first
@@ -124,6 +128,52 @@ export function createInteractionsRouter(deps: InteractionsRouterDeps): Router {
       );
       res.status(204).send();
     } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/interactions/:id/summarize — AI summarization
+  router.post('/:id/summarize', async (req, res, next) => {
+    try {
+      let interaction: Interaction | null;
+      try {
+        interaction = await interactionsStore.get(req.params.id);
+      } catch (err) {
+        if (err instanceof FileStoreQuarantineError) {
+          res.status(404).json(NOT_FOUND_RESPONSE);
+          return;
+        }
+        throw err;
+      }
+      if (interaction === null || interaction.deletedAt !== null) {
+        res.status(404).json(NOT_FOUND_RESPONSE);
+        return;
+      }
+
+      if (!interaction.summary || !interaction.summary.trim()) {
+        throw new ValidationError('Interaction has no summary text to summarize', {
+          op: 'interactions.summarize',
+          context: { interactionId: interaction.id },
+        });
+      }
+
+      const updated = await summarizeService.summarize(interaction);
+      res.status(200).json({ interaction: updated });
+    } catch (err) {
+      // SummarizeError and SummarizeConfigError both extend AppError.
+      // Handle inline so recoverable is included in the error object;
+      // the global handler does not surface recoverable on 503s.
+      if (err instanceof SummarizeError || err instanceof SummarizeConfigError) {
+        res.status(503).json({
+          error: {
+            type:        err.name,
+            message:     err.message,
+            debugBlock:  err.toDebugBlock(),
+            recoverable: err.recoverable,
+          },
+        });
+        return;
+      }
       next(err);
     }
   });

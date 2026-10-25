@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import express, { type Express } from 'express';
@@ -11,7 +11,17 @@ import { createErrorHandler } from '../middleware/error-handler.js';
 import { ContactSchema, CONTACT_SCHEMA_VERSION, type Contact } from '../schemas/contact.js';
 import { InteractionSchema, INTERACTION_SCHEMA_VERSION, type Interaction } from '../schemas/interaction.js';
 import { createInteractionsRouter } from './interactions.js';
+import type { AnthropicClient } from '../lib/ai-client.js';
 import type { Logger } from '../lib/logger.js';
+
+const VALID_AI_JSON = JSON.stringify({ summary: 'Clean summary.', followUps: ['Send the link'] });
+
+function makeNoopAnthropicClient(): AnthropicClient {
+  return {
+    isConfigured: true,
+    async summarize() { return VALID_AI_JSON; },
+  };
+}
 
 function createMockLogger(): Logger {
   return { debug() {}, info() {}, warn() {}, error() {} };
@@ -95,7 +105,11 @@ describe('interactions router', () => {
     app.use(express.json());
     app.use(
       '/api/interactions',
-      createInteractionsRouter({ interactionsStore: interactionStore, contactsStore: contactStore })
+      createInteractionsRouter({
+        interactionsStore: interactionStore,
+        contactsStore: contactStore,
+        anthropicClient: makeNoopAnthropicClient(),
+      })
     );
     app.use(createErrorHandler(logger));
   });
@@ -386,6 +400,114 @@ describe('interactions router', () => {
       const res = await request(app).delete(`/api/interactions/${id}`);
       expect(res.status).toBe(404);
       expect(res.body.error.type).toBe('NotFound');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/interactions/:id/summarize
+  // ---------------------------------------------------------------------------
+  describe('POST /api/interactions/:id/summarize', () => {
+    function makeAppWithClient(client: AnthropicClient, logger: Logger): Express {
+      const a = express();
+      a.use(express.json());
+      a.use(
+        '/api/interactions',
+        createInteractionsRouter({
+          interactionsStore: interactionStore,
+          contactsStore: contactStore,
+          anthropicClient: client,
+        })
+      );
+      a.use(createErrorHandler(logger));
+      return a;
+    }
+
+    it('returns 200 with updated interaction on success', async () => {
+      const client: AnthropicClient = {
+        isConfigured: true,
+        async summarize() { return VALID_AI_JSON; },
+      };
+      const testApp = makeAppWithClient(client, createMockLogger());
+
+      const interaction = makeInteraction({ summary: 'rambling note text' });
+      await interactionStore.save(interaction, { preserveTimestamps: true });
+
+      const res = await request(testApp).post(`/api/interactions/${interaction.id}/summarize`);
+      expect(res.status).toBe(200);
+      expect(res.body.interaction.aiSummary).toBe('Clean summary.');
+      expect(res.body.interaction.followUps).toEqual(['Send the link']);
+    });
+
+    it('returns 404 for unknown interaction id; no AI call made', async () => {
+      let called = false;
+      const client: AnthropicClient = {
+        isConfigured: true,
+        async summarize() { called = true; return VALID_AI_JSON; },
+      };
+      const testApp = makeAppWithClient(client, createMockLogger());
+
+      const res = await request(testApp).post(`/api/interactions/${crypto.randomUUID()}/summarize`);
+      expect(res.status).toBe(404);
+      expect(called).toBe(false);
+    });
+
+    it('returns 503 with recoverable:true when AI call throws (transient)', async () => {
+      const client: AnthropicClient = {
+        isConfigured: true,
+        async summarize() { throw new Error('rate_limit_error'); },
+      };
+      const testApp = makeAppWithClient(client, createMockLogger());
+
+      const interaction = makeInteraction({ summary: 'some note' });
+      await interactionStore.save(interaction, { preserveTimestamps: true });
+
+      const res = await request(testApp).post(`/api/interactions/${interaction.id}/summarize`);
+      expect(res.status).toBe(503);
+      expect(res.body.error.recoverable).toBe(true);
+
+      // Interaction on disk unchanged
+      const onDisk = JSON.parse(
+        await readFile(path.join(interactionsDir, `${interaction.id}.json`), 'utf-8')
+      ) as { aiSummary: unknown };
+      expect(onDisk.aiSummary == null).toBe(true);
+    });
+
+    it('key-like string absent from logger args and 503 debugBlock', async () => {
+      const FAKE_KEY = 'sk-ant-test-FAKE-KEY-12345';
+      // Mock client throws an error whose message contains the fake key string
+      const client: AnthropicClient = {
+        isConfigured: true,
+        async summarize() { throw new Error(`Authentication failed: ${FAKE_KEY}`); },
+      };
+
+      // Spy on all logger methods
+      const spiedLogger: Logger = {
+        debug: vi.fn(),
+        info:  vi.fn(),
+        warn:  vi.fn(),
+        error: vi.fn(),
+      };
+      const testApp = makeAppWithClient(client, spiedLogger);
+
+      const interaction = makeInteraction({ summary: 'some note' });
+      await interactionStore.save(interaction, { preserveTimestamps: true });
+
+      const res = await request(testApp).post(`/api/interactions/${interaction.id}/summarize`);
+      expect(res.status).toBe(503);
+
+      // (a) Key-like string must not appear in any logger call argument
+      const allLoggerArgs = [
+        ...vi.mocked(spiedLogger.debug).mock.calls,
+        ...vi.mocked(spiedLogger.info).mock.calls,
+        ...vi.mocked(spiedLogger.warn).mock.calls,
+        ...vi.mocked(spiedLogger.error).mock.calls,
+      ].map((args) => JSON.stringify(args));
+      for (const entry of allLoggerArgs) {
+        expect(entry).not.toContain(FAKE_KEY);
+      }
+
+      // (b) Key-like string must not appear in the 503 response body's debugBlock
+      expect(JSON.stringify(res.body)).not.toContain(FAKE_KEY);
     });
   });
 });

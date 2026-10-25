@@ -86,9 +86,11 @@ export class SummarizeService {
       firstText = await this.client.summarize(rawText);
     } catch (err) {
       // SDK transport error (rate limit, timeout, overload, auth).
-      // Does NOT catch parse failures — those are handled after this block.
+      // Use err.name not err.message — err.message may contain the API key
+      // if the SDK embeds it in auth-failure error text, and SummarizeError.message
+      // ends up in toDebugBlock() which is copy-pasteable per ADR 010.
       throw new SummarizeError(
-        `AI call failed: ${(err as Error).message}`,
+        `AI call failed: ${(err as Error).name ?? 'Error'}`,
         { op: 'summarizeService.call', cause: err instanceof Error ? err : undefined }
       );
     }
@@ -104,7 +106,7 @@ export class SummarizeService {
         retryText = await this.client.summarize(rawText, { nudge: true });
       } catch (err) {
         throw new SummarizeError(
-          `AI retry call failed: ${(err as Error).message}`,
+          `AI retry call failed: ${(err as Error).name ?? 'Error'}`,
           { op: 'summarizeService.retry', cause: err instanceof Error ? err : undefined }
         );
       }

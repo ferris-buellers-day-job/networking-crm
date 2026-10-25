@@ -10,6 +10,7 @@ import { createInboxRouter } from './routes/inbox.js';
 import { createRemindersRouter } from './routes/reminders.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 import { initStorage, FatalStorageError, type StorageContext } from './services/storage.js';
+import { AnthropicSdkClient } from './lib/ai-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isProduction = process.env.NODE_ENV === 'production';
@@ -147,9 +148,18 @@ async function main(): Promise<void> {
   });
   app.use('/api/contacts', contactsRouter);
 
+  const anthropicClient = new AnthropicSdkClient(
+    process.env.ANTHROPIC_API_KEY,
+    process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001'
+  );
+  if (!process.env.ANTHROPIC_API_KEY) {
+    storage.logger.warn('server.init', 'ANTHROPIC_API_KEY not set — AI summarization unavailable');
+  }
+
   const interactionsRouter = createInteractionsRouter({
     interactionsStore: storage.interactionsStore,
-    contactsStore: storage.contactsStore,
+    contactsStore:     storage.contactsStore,
+    anthropicClient,
   });
   app.use('/api/interactions', interactionsRouter);
 
